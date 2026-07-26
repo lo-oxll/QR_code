@@ -37,7 +37,7 @@ header.hero{
   border-radius:0;border:none;background:transparent;
   filter:drop-shadow(0 6px 14px rgba(14,17,22,.3));
 }
-h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relative;top:-2px;direction:ltr;}
+h1.brand{font-size:clamp(26px,7vw,46px);margin:0;line-height:1;color:var(--ink);position:relative;top:-2px;direction:ltr;white-space:nowrap;}
 .eyebrow{
   display:inline-block;font-family:'Cairo',sans-serif;font-size:15px;font-weight:700;color:var(--moss);
   margin:0 0 16px;letter-spacing:0;animation:fadeUp .6s .05s ease both;
@@ -58,7 +58,7 @@ h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relativ
 
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:24px;align-items:stretch;}
 .card{
-  background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;
+  background:var(--card);border:1px solid var(--line);border-radius:16px 16px 0 0;overflow:hidden;
   display:flex;flex-direction:column;
   transition:transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .3s, border-color .3s;
   animation:fadeUp .5s ease both;
@@ -80,7 +80,7 @@ h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relativ
 .book-btn{
   display:block;width:100%;border:2px solid var(--btn-border);padding:13px;font-weight:700;font-size:14px;
   background:var(--onyx);color:#FFFFFF;cursor:pointer;letter-spacing:.02em;font-family:'Cairo',sans-serif;
-  transition:background .25s;
+  transition:background .25s;border-radius:0;-webkit-appearance:none;appearance:none;
 }
 .book-btn:hover{background:var(--moss);}
 .fab{

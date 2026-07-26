@@ -327,7 +327,7 @@ function renderStore(){
     <div class="wrap">
       <header class="hero">
         <div class="brand-row">
-          <h1 class="brand display">QR CODE</h1>
+          <h1 class="brand display">QR CODE STORE</h1>
           <img src="${esc(state.settings.logo || defaultLogoSrc())}" alt="شعار QR CODE" class="logo-img">
         </div>
         <span class="eyebrow">${esc(state.settings.eyebrow || DEFAULT_EYEBROW)}</span>

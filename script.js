@@ -55,6 +55,9 @@ function applyTheme(theme){
   document.documentElement.setAttribute("data-theme", theme);
   const btn = document.getElementById("themeToggle");
   if (btn) btn.textContent = theme === "dark" ? "☀️" : "🌙";
+  // إن كان المتجر يستخدم الشعار الافتراضي (لا يوجد شعار مخصص محفوظ بالإعدادات)، نبدّل الصورة فورًا مع تبديل الوضع
+  const logoEl = document.querySelector(".logo-img");
+  if (logoEl && !state.settings.logo) logoEl.src = defaultLogoSrc();
 }
 function initTheme(){
   const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -133,6 +136,13 @@ async function sendOrderToAlwaseet({ name, phone, phone2, cityId, regionId, loca
 const DEFAULT_EYEBROW = "طباعة · تطريز · ليزر";
 const DEFAULT_LEDE = "نطبع ونطرّز ونقصّ بالليزر كل ما تحتاجه من تشيرتات وملابس مخصصة، أوشحة التخرج، الباجات التعريفية، الأقلام المطبوعة، وسجاد Tufting بتصميمك الخاص. اختر منتجك واحجزه، وسنتواصل معك لإتمام الطلب.";
 const DEFAULT_CONTACT_LABEL = "تواصل معنا مباشرة عبر:";
+
+// الشعار الافتراضي (عند عدم رفع شعار مخصص من الإعدادات): خلفية شفافة بالوضع النهاري،
+// وصورة كاملة بدون تفريغ بالوضع الليلي، لأن الوحدات السوداء تختفي فوق خلفية غامقة بدون خلفية بيضاء خلفها
+function defaultLogoSrc(){
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  return isDark ? "logo-dark.png" : "logo.png";
+}
 
 /* ======================= حالة عامة ======================= */
 let state = {
@@ -318,7 +328,7 @@ function renderStore(){
       <header class="hero">
         <div class="brand-row">
           <h1 class="brand display">QR CODE</h1>
-          <img src="${esc(state.settings.logo || 'logo.png')}" alt="شعار QR CODE" class="logo-img">
+          <img src="${esc(state.settings.logo || defaultLogoSrc())}" alt="شعار QR CODE" class="logo-img">
         </div>
         <span class="eyebrow">${esc(state.settings.eyebrow || DEFAULT_EYEBROW)}</span>
         <p class="lede">${esc(state.settings.lede || DEFAULT_LEDE)}</p>

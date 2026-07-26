@@ -236,7 +236,7 @@ function render(){
 
 function renderStore(){
   const items = state.products.map(p => {
-    const imgTag = p.image ? `<img src="${esc(p.image)}" alt="${esc(p.name)}">` : '🧴';
+    const imgTag = p.image ? `<img src="${esc(p.image)}" alt="${esc(p.name)}">` : '🖨️';
     return `
       <div class="card">
         <div class="img">${imgTag}</div>
@@ -256,11 +256,11 @@ function renderStore(){
     <div class="wrap">
       <header class="hero">
         <div class="brand-row">
-          <h1 class="brand display">قصّة</h1>
-          <img src="logo.png" alt="شعار قصّة" class="logo-img">
+          <h1 class="brand display">QR CODE</h1>
+          <img src="logo.png" alt="شعار QR CODE" class="logo-img">
         </div>
-        <span class="eyebrow">للعناية بالجسم</span>
-        <p class="lede">كل منتج هنا هو فصل من طقوسك اليومية. اختر منتجك واحجزه، وسنتواصل معك لإتمام الطلب.</p>
+        <span class="eyebrow">طباعة · تطريز · ليزر</span>
+        <p class="lede">نطبع ونطرّز ونقصّ بالليزر كل ما تحتاجه من تشيرتات وملابس مخصصة، أوشحة التخرج، الباجات التعريفية، الأقلام المطبوعة، وسجاد Tufting بتصميمك الخاص. اختر منتجك واحجزه، وسنتواصل معك لإتمام الطلب.</p>
         <a href="https://lo-oxll.github.io/gissa-web/" target="_blank" rel="noopener" class="contact-btn">تواصل مع المتجر</a>
       </header>
       ${state.products.length === 0 ? `<div class="empty">لم تتم إضافة أي منتجات بعد.</div>` : `<div class="grid">${items}</div>`}
@@ -525,7 +525,7 @@ function openBookingModal(){
     // وإلا يُستخدم الرقم العام المشترك من الإعدادات كخطة بديلة
     const num = formatWhatsapp(assignedWhatsapp || state.settings.whatsapp);
     if (num){
-      const msg = `حجز جديد من متجر قصة\nالمنتج: ${p.name}\nالكمية: ${qty}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
+      const msg = `حجز جديد من QR CODE\nالمنتج: ${p.name}\nالكمية: ${qty}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
       window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank");
     }
     showToast("تم إرسال الحجز بنجاح، سيتم التواصل معك قريبًا");
@@ -624,7 +624,7 @@ function renderAdmin(){
   app.innerHTML = `
     <div class="wrap">
       <div class="admin-header">
-        <h1 class="display" style="font-size:32px;margin:0;">لوحة قصّة <span class="role-badge">${roleLabel}</span></h1>
+        <h1 class="display" style="font-size:28px;margin:0;">لوحة QR CODE <span class="role-badge">${roleLabel}</span></h1>
         <button class="ghost-btn" id="logoutBtn" style="width:auto;">خروج ⏏</button>
       </div>
       <div class="tabs">${tabsHtml}</div>

@@ -34,7 +34,7 @@ header.hero{
 .brand-row{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:10px;animation:fadeUp .6s ease both;}
 .logo-img{
   width:56px;height:56px;display:block;object-fit:cover;
-  border-radius:10px;border:1px solid var(--line);background:#fff;
+  border-radius:0;border:none;background:transparent;
   filter:drop-shadow(0 6px 14px rgba(14,17,22,.3));
 }
 h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relative;top:-2px;direction:ltr;}

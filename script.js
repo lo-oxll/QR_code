@@ -40,6 +40,13 @@ function getStreetsForRegion(regionName){
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
+// يميّز بين معرّف حقيقي من قاعدة البيانات (uuid) ومعرّف قديم محلي فقط (uid() قديم غير مرتبط بأي صف فعلي)
+// أي طلب/منتج قديم بمعرّف غير uuid لا يمكن تحديثه أو حذفه من Supabase مباشرة لأن العمود من نوع uuid،
+// لذلك يُعامَل هنا كسجل محلي فقط: يُحذف من الذاكرة والتخزين المحلي مباشرة دون استدعاء الخادم.
+function isDbId(id){
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
+}
+
 /* ======================= الوضع الليلي/النهاري ======================= */
 // هذا التفضيل يُحفظ في localStorage الخاص بمتصفح هذا الجهاز فقط،
 // لذلك تفعيله لا يغيّر أي شيء عند أي مستخدم آخر يفتح الموقع من جهازه الخاص
@@ -257,7 +264,7 @@ function render(){
 
 function renderStore(){
   const items = state.products.map(p => {
-    const imgTag = p.image ? `<img src="${esc(p.image)}" alt="${esc(p.name)}">` : '🖨️';
+    const imgTag = p.image ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" style="object-position:${esc(p.image_position || '50% 50%')};">` : '🖨️';
     return `
       <div class="card">
         <div class="img">${imgTag}</div>
@@ -282,7 +289,17 @@ function renderStore(){
         </div>
         <span class="eyebrow">طباعة · تطريز · ليزر</span>
         <p class="lede">نطبع ونطرّز ونقصّ بالليزر كل ما تحتاجه من تشيرتات وملابس مخصصة، أوشحة التخرج، الباجات التعريفية، الأقلام المطبوعة، وسجاد Tufting بتصميمك الخاص. اختر منتجك واحجزه، وسنتواصل معك لإتمام الطلب.</p>
-        <a href="https://lo-oxll.github.io/gissa-web/" target="_blank" rel="noopener" class="contact-btn">تواصل مع المتجر</a>
+        <div class="contact-row">
+          <a href="https://wa.me/9647714623377" target="_blank" rel="noopener" class="social-btn" title="واتساب">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.09-1.33A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18c-1.6 0-3.09-.44-4.36-1.2l-.31-.19-3.02.79.81-2.95-.2-.31A7.94 7.94 0 0 1 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8zm4.36-5.86c-.24-.12-1.42-.7-1.64-.78-.22-.08-.38-.12-.54.12-.16.24-.62.78-.76.94-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.44-1.34-1.68-.14-.24-.02-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78-.2-.47-.4-.4-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.7 2.6 4.12 3.64.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.42-.58 1.62-1.14.2-.56.2-1.04.14-1.14-.06-.1-.22-.16-.46-.28z"/></svg>
+          </a>
+          <a href="https://www.instagram.com/qr__iq" target="_blank" rel="noopener" class="social-btn" title="انستغرام">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1"/></svg>
+          </a>
+          <a href="https://www.tiktok.com/@qr__iq" target="_blank" rel="noopener" class="social-btn" title="تيك توك">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16.5 2h-3v13.5a3 3 0 1 1-2.5-2.96V9.4A6.5 6.5 0 1 0 16.5 15.8V8.2a7.4 7.4 0 0 0 4.5 1.5V6.6a4.3 4.3 0 0 1-4.5-4.6z"/></svg>
+          </a>
+        </div>
       </header>
       ${state.products.length === 0 ? `<div class="empty">لم تتم إضافة أي منتجات بعد.</div>` : `<div class="grid">${items}</div>`}
     </div>
@@ -314,7 +331,7 @@ function openBookingModal(){
 
   function paint(){
     const total = qty * Number(p.price);
-    const modalImg = p.image ? '<img src="' + esc(p.image) + '">' : '<div class="ph"></div>';
+    const modalImg = p.image ? '<img src="' + esc(p.image) + '" style="object-position:' + esc(p.image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
     const cityOptions = cities.map(c => `<option value="${esc(c.id)}" ${String(c.id)===String(vals.cityId) ? "selected" : ""}>${esc(c.city_name)}</option>`).join("");
     modalBg.innerHTML = `
       <div class="modal">
@@ -352,7 +369,7 @@ function openBookingModal(){
         <div class="field"><div class="box">📍<input id="fLoc" placeholder="${citiesFailed ? "الموقع / العنوان" : "أقرب نقطة دالة (تفاصيل إضافية)"}" value="${esc(vals.loc)}"></div><div class="err" id="errLoc"></div></div>
         ${citiesFailed ? "" : `<div id="streetChips" class="street-chips"></div>`}
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
-        <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام (اختياري)" value="${esc(vals.instagram)}" dir="ltr"></div></div>
+        <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام" value="${esc(vals.instagram)}" dir="ltr"></div><div class="err" id="errInsta"></div></div>
         <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(total)} د.ع</span></div>
         <button class="primary-btn" id="submitOrder">تأكيد الحجز</button>
       </div>
@@ -439,7 +456,10 @@ function openBookingModal(){
   // يتحول النموذج تلقائيًا لحقل عنوان نصي حر بدل تعطيل الحجز بالكامل
   (async () => {
     try {
-      cities = await getAlwaseetCities();
+      cities = await Promise.race([
+        getAlwaseetCities(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("انتهت مهلة الاتصال")), 9000))
+      ]);
       paint();
     } catch (err) {
       console.error("alwaseet cities load error", err);
@@ -459,6 +479,7 @@ function openBookingModal(){
     document.getElementById("errName").textContent = "";
     document.getElementById("errLoc").textContent = "";
     document.getElementById("errPhone").textContent = "";
+    document.getElementById("errInsta").textContent = "";
     if (!citiesFailed) {
       document.getElementById("errCity").textContent = "";
       document.getElementById("errRegion").textContent = "";
@@ -466,6 +487,7 @@ function openBookingModal(){
     if (!name){ document.getElementById("errName").textContent = "أدخل الاسم"; ok = false; }
     if (!loc){ document.getElementById("errLoc").textContent = "أدخل الموقع"; ok = false; }
     if (!phone || phone.replace(/\D/g,"").length < 8){ document.getElementById("errPhone").textContent = "أدخل رقم هاتف صحيح"; ok = false; }
+    if (!instagram){ document.getElementById("errInsta").textContent = "أدخل يوزر الانستغرام"; ok = false; }
     if (!citiesFailed && !cityId){ document.getElementById("errCity").textContent = "اختر المدينة"; ok = false; }
     if (!citiesFailed && !regionId){ document.getElementById("errRegion").textContent = "اختر المنطقة"; ok = false; }
     if (!ok) return;
@@ -508,7 +530,7 @@ function openBookingModal(){
     }
 
     // تحديث فوري للواجهة محليًا (الصورة تُعرض هنا فقط، لأن جدول orders الأصلي لا يخزنها)
-    const localOrder = { ...inserted, product_image: p.image || "" };
+    const localOrder = { ...inserted, product_image: p.image || "", product_image_position: p.image_position || "50% 50%" };
     state.orders.unshift(localOrder);
 
     // 2) إرسال الطلب مباشرة إلى الوسيط للتوصيل — فقط إذا اختار الزبون مدينة/منطقة فعليًا
@@ -685,7 +707,7 @@ function renderProductsReadOnly(body){
   }
   body.innerHTML = `<div id="prodListRO"></div>`;
   document.getElementById("prodListRO").innerHTML = state.products.map(p => {
-    const prodImg = p.image ? '<img src="' + esc(p.image) + '">' : '<div class="ph"></div>';
+    const prodImg = p.image ? '<img src="' + esc(p.image) + '" style="object-position:' + esc(p.image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
     return `
       <div class="prod-row">
         ${prodImg}
@@ -697,25 +719,81 @@ function renderProductsReadOnly(body){
 
 function renderProductsTab(body){
   let pendingImage = null;
+  let pendingPos = { x: 50, y: 50 }; // نسبة موضع الصورة داخل الإطار (لضبط أي جزء منها يظهر)
   body.innerHTML = `
     <div class="panel">
       <h3>إضافة منتج جديد</h3>
       <input type="file" id="fileInput" accept="image/*" style="display:none">
       <div class="upload-box" id="uploadBox">📷 إضافة صورة المنتج</div>
+      <p class="hint" id="dragHint" style="display:none;margin-top:-8px;">اسحب الصورة داخل الإطار لضبط الجزء الظاهر منها</p>
       <input class="plain-input" id="pName" placeholder="اسم المنتج">
+      <div class="err" id="errPName" style="margin:-6px 0 10px;"></div>
       <input class="plain-input" id="pPrice" placeholder="السعر (د.ع)" inputmode="numeric">
+      <div class="err" id="errPPrice" style="margin:-6px 0 10px;"></div>
       <textarea class="plain-textarea" id="pDesc" placeholder="وصف مختصر (اختياري)" rows="2"></textarea>
       <button class="primary-btn" id="addBtn">+ إضافة المنتج</button>
     </div>
     <div id="prodList"></div>
   `;
-  document.getElementById("uploadBox").onclick = () => document.getElementById("fileInput").click();
+
+  const uploadBox = document.getElementById("uploadBox");
+  const dragHint = document.getElementById("dragHint");
+
+  function paintUploadBox(){
+    uploadBox.innerHTML = `<img id="posImg" src="${pendingImage}" style="object-position:${pendingPos.x}% ${pendingPos.y}%;cursor:grab;">`;
+    dragHint.style.display = "block";
+    wireDrag();
+  }
+
+  // سحب الصورة داخل الإطار (فأرة أو لمس) لضبط أي جزء منها يظهر ضمن مساحة البطاقة المربعة
+  function wireDrag(){
+    const imgEl = document.getElementById("posImg");
+    let dragging = false;
+    let startX = 0, startY = 0, startPos = { ...pendingPos };
+
+    function pointerPos(e){
+      const t = e.touches ? e.touches[0] : e;
+      return { x: t.clientX, y: t.clientY };
+    }
+    function onDown(e){
+      dragging = true;
+      const p = pointerPos(e);
+      startX = p.x; startY = p.y; startPos = { ...pendingPos };
+      imgEl.style.cursor = "grabbing";
+      e.preventDefault();
+    }
+    function onMove(e){
+      if (!dragging) return;
+      const p = pointerPos(e);
+      const rect = uploadBox.getBoundingClientRect();
+      const dx = ((p.x - startX) / rect.width) * 100;
+      const dy = ((p.y - startY) / rect.height) * 100;
+      // السحب لليمين يُظهر الجزء الأيسر من الصورة، لذا نعكس اتجاه الإزاحة عن object-position
+      pendingPos.x = Math.min(100, Math.max(0, startPos.x - dx));
+      pendingPos.y = Math.min(100, Math.max(0, startPos.y - dy));
+      imgEl.style.objectPosition = `${pendingPos.x}% ${pendingPos.y}%`;
+    }
+    function onUp(){ dragging = false; if (imgEl) imgEl.style.cursor = "grab"; }
+
+    imgEl.addEventListener("mousedown", onDown);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    imgEl.addEventListener("touchstart", onDown, { passive: false });
+    window.addEventListener("touchmove", onMove, { passive: true });
+    window.addEventListener("touchend", onUp);
+  }
+
+  uploadBox.onclick = (e) => {
+    if (e.target.id === "posImg") return; // النقر على الصورة نفسها لسحبها فقط، لا يفتح منتقي الملفات
+    document.getElementById("fileInput").click();
+  };
   document.getElementById("fileInput").onchange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const dataUrl = await resizeImage(file);
     pendingImage = dataUrl;
-    document.getElementById("uploadBox").innerHTML = `<img src="${dataUrl}">`;
+    pendingPos = { x: 50, y: 50 };
+    paintUploadBox();
   };
   document.getElementById("pPrice").oninput = (e) => {
     e.target.value = e.target.value.replace(/\D/g, "");
@@ -724,13 +802,20 @@ function renderProductsTab(body){
     const name = document.getElementById("pName").value.trim();
     const price = document.getElementById("pPrice").value.trim();
     const desc = document.getElementById("pDesc").value.trim();
-    if (!name || !price) return;
+    document.getElementById("errPName").textContent = "";
+    document.getElementById("errPPrice").textContent = "";
+    let ok = true;
+    if (!name) { document.getElementById("errPName").textContent = "أدخل اسم المنتج"; ok = false; }
+    if (!price || Number(price) <= 0) { document.getElementById("errPPrice").textContent = "أدخل سعرًا صحيحًا أكبر من صفر"; ok = false; }
+    if (!ok) return;
+
     const btn = document.getElementById("addBtn");
     btn.disabled = true; btn.textContent = "جارِ الحفظ...";
 
-    const { error } = await supabaseClient
-      .from('products')
-      .insert([{ name, price: Number(price), description: desc, image: pendingImage }]);
+    const row = { name, price: Number(price), description: desc, image: pendingImage };
+    if (pendingImage) row.image_position = `${pendingPos.x}% ${pendingPos.y}%`;
+
+    const { error } = await supabaseClient.from('products').insert([row]);
 
     if (error) {
       console.error("Error inserting product:", error);
@@ -749,7 +834,7 @@ function renderProductsTab(body){
     list.innerHTML = `<p class="hint center">لا توجد منتجات مضافة بعد.</p>`;
   } else {
     list.innerHTML = state.products.map(p => {
-      const prodImg = p.image ? '<img src="' + esc(p.image) + '">' : '<div class="ph"></div>';
+      const prodImg = p.image ? '<img src="' + esc(p.image) + '" style="object-position:' + esc(p.image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
       return `
         <div class="prod-row">
           ${prodImg}
@@ -762,11 +847,21 @@ function renderProductsTab(body){
       b.onclick = async () => {
         const confirmDelete = confirm("هل أنت متأكد من حذف هذا المنتج؟");
         if (!confirmDelete) return;
+        const pid = b.dataset.del;
+
+        // منتج قديم محفوظ محليًا فقط (معرّفه ليس uuid حقيقي) — لا يوجد صف مطابق له في Supabase أصلًا
+        if (!isDbId(pid)) {
+          state.products = state.products.filter(p => String(p.id) !== String(pid));
+          saveLocal(KEYS.PRODUCTS, state.products);
+          showToast("تم حذف المنتج (كان مخزَّنًا محليًا فقط)");
+          renderAdmin();
+          return;
+        }
 
         const { error } = await supabaseClient
           .from('products')
           .delete()
-          .eq('id', b.dataset.del);
+          .eq('id', pid);
 
         if (error) {
           console.error("Error deleting product:", error);
@@ -822,7 +917,7 @@ function renderOrdersTab(body){
   const listHtml = filtered.length === 0
     ? `<p class="hint center" style="padding:30px 0;">لا توجد حجوزات في هذا القسم.</p>`
     : filtered.map(o => {
-      const orderImg = o.product_image ? '<img src="' + esc(o.product_image) + '">' : '<div class="ph"></div>';
+      const orderImg = o.product_image ? '<img src="' + esc(o.product_image) + '" style="object-position:' + esc(o.product_image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
       const cannotSendToAlwaseet = !o.city_id || !o.region_id || o.alwaseet_status === 'sent';
       return `
         <div class="order-card">
@@ -845,6 +940,8 @@ function renderOrdersTab(body){
             <button class="btn-cancel" data-cancel="${o.id}" ${reviewStatus(o)==='cancelled' ? 'disabled' : ''}>✕ إلغاء</button>
             <button class="btn-confirm" data-confirm="${o.id}" ${reviewStatus(o)==='confirmed' ? 'disabled' : ''}>✓ تم التأكيد</button>
             <button class="btn-whatsapp" data-wa="${o.id}">💬 واتساب</button>
+            <button class="btn-whatsapp" data-wacustomer="${o.id}">📱 واتساب العميل</button>
+            <button class="btn-instagram" data-instagram="${o.id}" ${o.instagram_username ? '' : 'disabled'}>📷 انستغرام العميل</button>
             <button class="btn-alwaseet" data-sendalwaseet="${o.id}" ${cannotSendToAlwaseet ? 'disabled' : ''}>${o.alwaseet_status === 'sent' ? '✓ أُرسل للوسيط' : '🚚 إرسال إلى الوسيط'}</button>
             ${isOwner ? `<button class="btn-delete" data-delorder="${o.id}">🗑 حذف</button>` : ''}
           </div>
@@ -858,17 +955,35 @@ function renderOrdersTab(body){
     b.onclick = () => { state.orderFilter = b.dataset.orderfilter; renderOrdersTab(body); };
   });
 
+  // بعد تأكيد أو إلغاء الطلب، تُرسَل نسخة منه تلقائيًا إلى الرقم الرئيسي المسجَّل في الإعدادات،
+  // مع اسم المشرف الذي اتخذ الإجراء، حتى يبقى صاحب المتجر مطّلعًا على كل حركة
+  function notifyMainNumber(order, actionLabel){
+    const mainNum = formatWhatsapp(state.settings.whatsapp);
+    if (!mainNum) return;
+    const actingUser = state.currentAdmin?.username || "غير معروف";
+    const msg = `${actionLabel} — QR CODE\nبواسطة: ${actingUser}\nالمنتج: ${order.product_name}\nالعميل: ${order.customer_name}\nالهاتف: ${order.phone_number || order.phone || ""}\nالإجمالي: ${money(order.total)} د.ع`;
+    window.open(`https://wa.me/${mainNum}?text=${encodeURIComponent(msg)}`, "_blank");
+  }
+
   async function updateReviewStatus(orderId, status){
     const order = state.orders.find(o => String(o.id) === String(orderId));
     if (!order) return;
-    const { error } = await supabaseClient.from('orders').update({ review_status: status }).eq('id', orderId);
-    if (error) {
-      console.error("update review_status error", error);
-      showToast("تعذر تحديث حالة الطلب: " + (error.message || "خطأ غير معروف"), "err");
-      return;
+
+    if (isDbId(orderId)) {
+      const { error } = await supabaseClient.from('orders').update({ review_status: status }).eq('id', orderId);
+      if (error) {
+        console.error("update review_status error", error);
+        showToast("تعذر تحديث حالة الطلب: " + (error.message || "خطأ غير معروف"), "err");
+        return;
+      }
+    } else {
+      // طلب قديم محفوظ محليًا فقط، لا صف حقيقي له في قاعدة البيانات لتحديثه
+      saveLocal(KEYS.ORDERS, state.orders);
     }
+
     order.review_status = status;
     showToast(status === 'confirmed' ? "تم تأكيد الطلب" : "تم إلغاء الطلب");
+    notifyMainNumber(order, status === 'confirmed' ? "تم تأكيد الطلب" : "تم إلغاء الطلب");
     renderOrdersTab(body);
   }
 
@@ -890,6 +1005,26 @@ function renderOrdersTab(body){
     };
   });
 
+  // تواصل مباشر مع العميل نفسه على رقمه (بدون رسالة معبّأة مسبقًا، فتح محادثة فقط)
+  body.querySelectorAll("[data-wacustomer]").forEach(b => {
+    b.onclick = () => {
+      const o = state.orders.find(x => String(x.id) === String(b.dataset.wacustomer));
+      if (!o) return;
+      const num = formatWhatsapp(o.phone_number || o.phone);
+      if (!num) { showToast("رقم هاتف العميل غير صالح", "err"); return; }
+      window.open(`https://wa.me/${num}`, "_blank");
+    };
+  });
+
+  // فتح صفحة انستغرام الشخصية للعميل كما كتبها بنفسه عند الحجز
+  body.querySelectorAll("[data-instagram]").forEach(b => {
+    b.onclick = () => {
+      const o = state.orders.find(x => String(x.id) === String(b.dataset.instagram));
+      if (!o || !o.instagram_username) return;
+      window.open(`https://instagram.com/${o.instagram_username}`, "_blank");
+    };
+  });
+
   body.querySelectorAll("[data-sendalwaseet]").forEach(b => {
     b.onclick = async () => {
       const order = state.orders.find(o => String(o.id) === String(b.dataset.sendalwaseet));
@@ -907,16 +1042,25 @@ function renderOrdersTab(body){
           qty: order.qty || 1,
           total: order.total || 0
         });
-        await supabaseClient.from('orders').update({
-          alwaseet_qr_id: qr_id, alwaseet_qr_link: qr_link, alwaseet_status: 'sent', alwaseet_error: null
-        }).eq('id', order.id);
         order.alwaseet_qr_id = qr_id; order.alwaseet_qr_link = qr_link; order.alwaseet_status = 'sent';
+        if (isDbId(order.id)) {
+          await supabaseClient.from('orders').update({
+            alwaseet_qr_id: qr_id, alwaseet_qr_link: qr_link, alwaseet_status: 'sent', alwaseet_error: null
+          }).eq('id', order.id);
+        } else {
+          saveLocal(KEYS.ORDERS, state.orders);
+        }
         showToast("تم إرسال الطلب إلى الوسيط بنجاح");
         renderOrdersTab(body);
       } catch (err) {
         console.error("send alwaseet error", err);
         order.alwaseet_error = err.message || "خطأ غير معروف";
-        await supabaseClient.from('orders').update({ alwaseet_status: 'failed', alwaseet_error: order.alwaseet_error }).eq('id', order.id);
+        order.alwaseet_status = 'failed';
+        if (isDbId(order.id)) {
+          await supabaseClient.from('orders').update({ alwaseet_status: 'failed', alwaseet_error: order.alwaseet_error }).eq('id', order.id);
+        } else {
+          saveLocal(KEYS.ORDERS, state.orders);
+        }
         showToast("فشل الإرسال للوسيط: " + order.alwaseet_error, "err");
         renderOrdersTab(body);
       }
@@ -927,13 +1071,23 @@ function renderOrdersTab(body){
     body.querySelectorAll("[data-delorder]").forEach(b => {
       b.onclick = async () => {
         if (!confirm("هل أنت متأكد من حذف هذا الطلب نهائيًا؟")) return;
-        const { error } = await supabaseClient.from('orders').delete().eq('id', b.dataset.delorder);
+        const oid = b.dataset.delorder;
+
+        if (!isDbId(oid)) {
+          state.orders = state.orders.filter(o => String(o.id) !== String(oid));
+          saveLocal(KEYS.ORDERS, state.orders);
+          showToast("تم حذف الطلب (كان مخزَّنًا محليًا فقط)");
+          renderOrdersTab(body);
+          return;
+        }
+
+        const { error } = await supabaseClient.from('orders').delete().eq('id', oid);
         if (error) {
           console.error("delete order error", error);
           showToast("تعذر حذف الطلب: " + (error.message || "خطأ غير معروف"), "err");
           return;
         }
-        state.orders = state.orders.filter(o => String(o.id) !== String(b.dataset.delorder));
+        state.orders = state.orders.filter(o => String(o.id) !== String(oid));
         showToast("تم حذف الطلب");
         renderOrdersTab(body);
       };
@@ -1144,15 +1298,19 @@ async function renderAdminsTab(body){
       listEl.innerHTML = `<p class="hint center">لا يوجد مشرفون مضافون بعد.</p>`;
       return;
     }
-    listEl.innerHTML = data.map(s => `
+    listEl.innerHTML = data.map(s => {
+      let dateLabel = "";
+      try { dateLabel = s.created_at ? new Date(s.created_at).toLocaleDateString("ar") : ""; } catch { dateLabel = ""; }
+      return `
       <div class="staff-row">
         <div class="info">
           <h4>${esc(s.username)}</h4>
-          <p>مراجعة الحجوزات فقط · أُضيف ${new Date(s.created_at).toLocaleDateString("ar")}</p>
+          <p>مراجعة الحجوزات فقط${dateLabel ? " · أُضيف " + dateLabel : ""}</p>
         </div>
         <button class="del-btn" data-removeusr="${esc(s.username)}">🗑</button>
       </div>
-    `).join("");
+    `;
+    }).join("");
     listEl.querySelectorAll("[data-removeusr]").forEach(b => {
       b.onclick = async () => {
         if (!confirm(`هل تريد إزالة صلاحية ${b.dataset.removeusr}؟`)) return;

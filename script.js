@@ -128,13 +128,19 @@ async function sendOrderToAlwaseet({ name, phone, phone2, cityId, regionId, loca
   };
 }
 
+/* ======================= محتوى افتراضي للواجهة الرئيسية ======================= */
+// تُستخدم كقيم احتياطية إذا لم يضبط المالك محتوى مخصصًا من الإعدادات، أو إذا تعذّر الاتصال بالسحابة
+const DEFAULT_EYEBROW = "طباعة · تطريز · ليزر";
+const DEFAULT_LEDE = "نطبع ونطرّز ونقصّ بالليزر كل ما تحتاجه من تشيرتات وملابس مخصصة، أوشحة التخرج، الباجات التعريفية، الأقلام المطبوعة، وسجاد Tufting بتصميمك الخاص. اختر منتجك واحجزه، وسنتواصل معك لإتمام الطلب.";
+const DEFAULT_CONTACT_LABEL = "تواصل معنا مباشرة عبر:";
+
 /* ======================= حالة عامة ======================= */
 let state = {
   view: "store",
   adminTab: "products",
   products: [],
   orders: [],
-  settings: { whatsapp: "" },
+  settings: { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "" },
   selectedProduct: null,
   // بيانات المشرف الحالي (owner أو staff) - محفوظة في الذاكرة فقط لهذه الجلسة، لا تُخزَّن على القرص
   currentAdmin: null, // { username, role, passwordHash }
@@ -199,12 +205,17 @@ async function loadSettings(){
       .eq('id', 1)
       .single();
     if (!error && data) {
-      state.settings = { whatsapp: data.whatsapp || "" };
+      state.settings = {
+        whatsapp: data.whatsapp || "",
+        eyebrow: data.eyebrow || DEFAULT_EYEBROW,
+        lede: data.lede || DEFAULT_LEDE,
+        logo: data.logo || ""
+      };
       return;
     }
   } catch (e) { console.error("settings load error", e); }
   // fallback محلي إن تعذر الاتصال بالسحابة
-  state.settings = loadLocal(KEYS.SETTINGS, { whatsapp: "" });
+  state.settings = loadLocal(KEYS.SETTINGS, { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "" });
 }
 
 async function saveWhatsapp(newNumber){
@@ -214,10 +225,32 @@ async function saveWhatsapp(newNumber){
     .eq('id', 1);
   if (error) {
     console.error("settings save error", error);
-    saveLocal(KEYS.SETTINGS, { whatsapp: newNumber }); // احتياط محلي فقط
+    saveLocal(KEYS.SETTINGS, { ...state.settings, whatsapp: newNumber }); // احتياط محلي فقط
     return false;
   }
   state.settings.whatsapp = newNumber;
+  return true;
+}
+
+// يحفظ محتوى الواجهة الرئيسية (العنوان الفرعي، النص التعريفي، الشعار) في نفس صف الإعدادات المشترك،
+// بحيث تنعكس أي تعديلات فورًا لكل زوار المتجر على كل الأجهزة
+async function saveSiteContent({ eyebrow, lede, logo }){
+  const patch = {};
+  if (eyebrow !== undefined) patch.eyebrow = eyebrow;
+  if (lede !== undefined) patch.lede = lede;
+  if (logo !== undefined) patch.logo = logo;
+
+  const { error } = await supabaseClient
+    .from('settings')
+    .update(patch)
+    .eq('id', 1);
+
+  if (error) {
+    console.error("site content save error", error);
+    saveLocal(KEYS.SETTINGS, { ...state.settings, ...patch }); // احتياط محلي فقط
+    return false;
+  }
+  state.settings = { ...state.settings, ...patch };
   return true;
 }
 
@@ -285,10 +318,11 @@ function renderStore(){
       <header class="hero">
         <div class="brand-row">
           <h1 class="brand display">QR CODE</h1>
-          <img src="logo.png" alt="شعار QR CODE" class="logo-img">
+          <img src="${esc(state.settings.logo || 'logo.png')}" alt="شعار QR CODE" class="logo-img">
         </div>
-        <span class="eyebrow">طباعة · تطريز · ليزر</span>
-        <p class="lede">نطبع ونطرّز ونقصّ بالليزر كل ما تحتاجه من تشيرتات وملابس مخصصة، أوشحة التخرج، الباجات التعريفية، الأقلام المطبوعة، وسجاد Tufting بتصميمك الخاص. اختر منتجك واحجزه، وسنتواصل معك لإتمام الطلب.</p>
+        <span class="eyebrow">${esc(state.settings.eyebrow || DEFAULT_EYEBROW)}</span>
+        <p class="lede">${esc(state.settings.lede || DEFAULT_LEDE)}</p>
+        <span class="contact-label">${esc(DEFAULT_CONTACT_LABEL)}</span>
         <div class="contact-row">
           <a href="https://wa.me/9647714623377" target="_blank" rel="noopener" class="social-btn" title="واتساب">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.09-1.33A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18c-1.6 0-3.09-.44-4.36-1.2l-.31-.19-3.02.79.81-2.95-.2-.31A7.94 7.94 0 0 1 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8zm4.36-5.86c-.24-.12-1.42-.7-1.64-.78-.22-.08-.38-.12-.54.12-.16.24-.62.78-.76.94-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.44-1.34-1.68-.14-.24-.02-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78-.2-.47-.4-.4-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.7 2.6 4.12 3.64.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.42-.58 1.62-1.14.2-.56.2-1.04.14-1.14-.06-.1-.22-.16-.46-.28z"/></svg>
@@ -1119,6 +1153,26 @@ function renderOrdersTab(body){
 function renderSettingsTab(body){
   body.innerHTML = `
     <div class="panel">
+      <h3>محتوى الواجهة الرئيسية</h3>
+      <p class="hint">هذا هو ما يراه الزبون فور دخوله المتجر. أي تعديل هنا يظهر فورًا لكل الزوار على كل الأجهزة.</p>
+
+      <label class="hint" style="display:block;margin:-4px 0 6px;">شعار المتجر</label>
+      <div class="upload-box" id="logoUpload" style="aspect-ratio:1;max-width:120px;">
+        <img src="${esc(state.settings.logo || 'logo.png')}" alt="الشعار الحالي">
+      </div>
+      <input type="file" id="logoFile" accept="image/*" style="display:none;">
+      <p class="hint" style="margin-top:6px;">اختر صورة مربعة قدر الإمكان (نسبة 1:1) لأفضل نتيجة، مثل تصميم QR الخاص بكم.</p>
+
+      <label class="hint" style="display:block;margin:14px 0 6px;">العنوان الفرعي (تحت اسم المتجر)</label>
+      <input class="plain-input" id="eyebrowInput" value="${esc(state.settings.eyebrow || DEFAULT_EYEBROW)}" placeholder="${esc(DEFAULT_EYEBROW)}">
+
+      <label class="hint" style="display:block;margin:0 0 6px;">النص التعريفي</label>
+      <textarea class="plain-textarea" id="ledeInput" rows="4" placeholder="${esc(DEFAULT_LEDE)}">${esc(state.settings.lede || DEFAULT_LEDE)}</textarea>
+
+      <div class="err" id="contentErr" style="margin:-6px 0 10px;color:var(--err);font-size:12px;"></div>
+      <button class="primary-btn" id="saveContent">حفظ المحتوى</button>
+    </div>
+    <div class="panel">
       <h3>رقم واتساب استلام الحجوزات</h3>
       <p class="hint">تُرسل كل تفاصيل الحجز تلقائيًا إلى هذا الرقم عبر واتساب. أدخل الرقم مع مفتاح الدولة (مثال: 9647701234567). هذا الرقم مشترك ويظهر فورًا على كل الأجهزة.</p>
       <input class="plain-input" id="waNum" value="${esc(state.settings.whatsapp)}" placeholder="9647xxxxxxxx" dir="ltr">
@@ -1133,6 +1187,39 @@ function renderSettingsTab(body){
       <button class="dark-btn" id="savePw">حفظ كلمة المرور</button>
     </div>
   `;
+
+  let pendingLogo = state.settings.logo || "";
+  document.getElementById("logoUpload").onclick = () => document.getElementById("logoFile").click();
+  document.getElementById("logoFile").onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    pendingLogo = await resizeImage(file, 300, 0.85);
+    document.getElementById("logoUpload").innerHTML = `<img src="${pendingLogo}" alt="الشعار الجديد">`;
+  };
+
+  document.getElementById("saveContent").onclick = async () => {
+    const eyebrow = document.getElementById("eyebrowInput").value.trim();
+    const lede = document.getElementById("ledeInput").value.trim();
+    const errEl = document.getElementById("contentErr");
+    errEl.textContent = "";
+
+    const btn = document.getElementById("saveContent");
+    btn.disabled = true; btn.textContent = "جارِ الحفظ...";
+    try {
+      const ok = await saveSiteContent({
+        eyebrow: eyebrow || DEFAULT_EYEBROW,
+        lede: lede || DEFAULT_LEDE,
+        logo: pendingLogo
+      });
+      if (ok) showToast("تم حفظ المحتوى بنجاح");
+      else showToast("تعذر الحفظ في السحابة، تم الحفظ محليًا فقط", "err");
+    } catch (e) {
+      console.error("save content error", e);
+      errEl.textContent = "تعذر حفظ المحتوى";
+    } finally {
+      btn.disabled = false; btn.textContent = "حفظ المحتوى";
+    }
+  };
 
   document.getElementById("saveWa").onclick = async () => {
     const val = document.getElementById("waNum").value.trim();

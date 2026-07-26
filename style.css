@@ -32,15 +32,22 @@ header.hero{
   animation:fadeIn .5s ease;
 }
 .brand-row{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:10px;animation:fadeUp .6s ease both;}
-.logo-img{width:56px;height:56px;display:block;filter:drop-shadow(0 6px 14px rgba(14,17,22,.3));}
+.logo-img{
+  width:56px;height:56px;display:block;object-fit:cover;
+  border-radius:10px;border:1px solid var(--line);background:#fff;
+  filter:drop-shadow(0 6px 14px rgba(14,17,22,.3));
+}
 h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relative;top:-2px;direction:ltr;}
 .eyebrow{
-  display:inline-block;font-size:13px;font-weight:700;color:var(--silver-dark);
-  margin:0 0 16px;letter-spacing:.16em;text-transform:uppercase;direction:ltr;
-  animation:fadeUp .6s .05s ease both;
+  display:inline-block;font-family:'Cairo',sans-serif;font-size:15px;font-weight:700;color:var(--moss);
+  margin:0 0 16px;letter-spacing:0;animation:fadeUp .6s .05s ease both;
 }
 .lede{max-width:440px;margin:0 auto;color:var(--muted);line-height:1.9;animation:fadeUp .6s .1s ease both;}
-.contact-row{display:flex;gap:14px;justify-content:center;margin-top:20px;animation:fadeUp .6s .15s ease both;}
+.contact-label{
+  display:block;font-family:'Cairo',sans-serif;font-size:13px;font-weight:600;color:var(--muted);
+  margin-top:24px;animation:fadeUp .6s .13s ease both;
+}
+.contact-row{display:flex;gap:14px;justify-content:center;margin-top:12px;animation:fadeUp .6s .15s ease both;}
 .social-btn{
   width:46px;height:46px;border-radius:50%;background:var(--onyx);color:#fff;
   display:flex;align-items:center;justify-content:center;

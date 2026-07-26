@@ -40,6 +40,26 @@ function getStreetsForRegion(regionName){
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
+/* ======================= الوضع الليلي/النهاري ======================= */
+// هذا التفضيل يُحفظ في localStorage الخاص بمتصفح هذا الجهاز فقط،
+// لذلك تفعيله لا يغيّر أي شيء عند أي مستخدم آخر يفتح الموقع من جهازه الخاص
+const THEME_KEY = "qissa:theme";
+function applyTheme(theme){
+  document.documentElement.setAttribute("data-theme", theme);
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.textContent = theme === "dark" ? "☀️" : "🌙";
+}
+function initTheme(){
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const saved = loadLocal(THEME_KEY, null) || (prefersDark ? "dark" : "light");
+  applyTheme(saved);
+  document.getElementById("themeToggle").onclick = () => {
+    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    saveLocal(THEME_KEY, next);
+    applyTheme(next);
+  };
+}
+
 /* ======================= الربط مع شركة الوسيط للتوصيل ======================= */
 // كل الاتصال بـ API الوسيط يمر عبر Edge Function باسم "alwaseet" على Supabase،
 // لأن اسم المستخدم وكلمة مرور التاجر يجب أن يبقيا على الخادم فقط ولا يظهرا هنا.
@@ -112,6 +132,7 @@ let state = {
   // بيانات المشرف الحالي (owner أو staff) - محفوظة في الذاكرة فقط لهذه الجلسة، لا تُخزَّن على القرص
   currentAdmin: null, // { username, role, passwordHash }
   staffList: [],
+  orderFilter: "pending", // "pending" (قيد المراجعة، الرئيسي) | "confirmed" | "cancelled"
 };
 
 const app = document.getElementById("app");
@@ -761,50 +782,117 @@ function renderProductsTab(body){
   }
 }
 
-function alwaseetBadge(o){
+// نص حالة الإرسال للوسيط فقط (بدون زر) — أزرار الإجراءات أصبحت موحّدة أسفل كل بطاقة
+function alwaseetStatusText(o){
   if (o.alwaseet_status === 'sent' && o.alwaseet_qr_link) {
     return `<a href="${esc(o.alwaseet_qr_link)}" target="_blank" style="font-size:11px;color:var(--moss);font-weight:700;">✓ أُرسل للوسيط · وصل #${esc(o.alwaseet_qr_id)}</a>`;
   }
   if (o.alwaseet_status === 'failed') {
-    return `<span style="font-size:11px;color:var(--err);">⚠ لم يُرسل للوسيط (${esc(o.alwaseet_error || "خطأ")}) <button data-retry="${o.id}" style="border:0;background:none;color:var(--ink);text-decoration:underline;cursor:pointer;font-family:'Cairo',sans-serif;font-size:11px;">إعادة المحاولة</button></span>`;
+    return `<span style="font-size:11px;color:var(--err);">⚠ فشل الإرسال للوسيط (${esc(o.alwaseet_error || "خطأ")})</span>`;
   }
   if (o.city_id && o.region_id) {
-    return `<span style="font-size:11px;color:var(--muted);">⏳ لم تُرسل بعد <button data-retry="${o.id}" style="border:0;background:none;color:var(--ink);text-decoration:underline;cursor:pointer;font-family:'Cairo',sans-serif;font-size:11px;">إرسال الآن</button></span>`;
+    return `<span style="font-size:11px;color:var(--muted);">⏳ لم تُرسل للوسيط بعد</span>`;
   }
-  return ""; // طلبات قديمة قبل تفعيل الربط، أو أُدخلت بدون مدينة/منطقة
+  return `<span style="font-size:11px;color:var(--muted);">— بدون مدينة/منطقة —</span>`;
 }
 
-function renderOrdersTab(body){
-  if (state.orders.length === 0){
-    body.innerHTML = `<p class="hint center" style="padding:30px 0;">لا توجد حجوزات بعد.</p>`;
-    return;
-  }
-  body.innerHTML = state.orders.map(o => {
-    const orderImg = o.product_image ? '<img src="' + esc(o.product_image) + '">' : '<div class="ph"></div>';
-    return `
-      <div class="order-card">
-        <div class="order-top">
-          ${orderImg}
-          <div style="flex:1">
-            <div style="font-weight:600;font-size:14px;">${esc(o.product_name)} <span style="color:var(--muted);font-weight:400;">${o.qty ? `× ${o.qty}` : ''}</span></div>
-            <div style="font-size:11px;color:var(--muted);">${new Date(o.created_at).toLocaleString("ar")}</div>
-          </div>
-          <div style="font-weight:700;font-size:14px;">${o.total ? money(o.total) + ' د.ع' : ''}</div>
-        </div>
-        <div class="order-details">
-          <div>👤 ${esc(o.customer_name)}</div>
-          <div>📍 ${esc(o.address || o.location)}${o.city_name ? ` — ${esc(o.city_name)}${o.region_name ? " / " + esc(o.region_name) : ""}` : ""}</div>
-          <div>📞 <a href="https://wa.me/${formatWhatsapp(o.phone_number || o.phone)}" target="_blank" style="color:var(--ink);text-decoration:underline;">${esc(o.phone_number || o.phone)}</a></div>
-          ${o.instagram_username ? `<div>📷 <a href="https://instagram.com/${esc(o.instagram_username)}" target="_blank" style="color:var(--moss);text-decoration:underline;">@${esc(o.instagram_username)}</a></div>` : ""}
-          <div style="margin-top:6px;">${alwaseetBadge(o)}</div>
-        </div>
-      </div>
-    `;
-  }).join("");
+// حالة المراجعة الافتراضية "pending" لأي طلب قديم لم يُحدَّث بعد إضافة هذا العمود
+function reviewStatus(o){ return o.review_status || "pending"; }
 
-  body.querySelectorAll("[data-retry]").forEach(b => {
+/* ---------- تبويب الحجوزات: مقسّم إلى قيد المراجعة (الرئيسي) / مؤكدة / ملغية ---------- */
+function renderOrdersTab(body){
+  const isOwner = state.currentAdmin?.role === "owner";
+
+  const counts = {
+    pending: state.orders.filter(o => reviewStatus(o) === "pending").length,
+    confirmed: state.orders.filter(o => reviewStatus(o) === "confirmed").length,
+    cancelled: state.orders.filter(o => reviewStatus(o) === "cancelled").length,
+  };
+
+  const filterTabsHtml = `
+    <div class="tabs" style="margin-bottom:16px;">
+      <button class="tab ${state.orderFilter==='pending'?'active':''}" data-orderfilter="pending">قيد المراجعة (${counts.pending})</button>
+      <button class="tab ${state.orderFilter==='confirmed'?'active':''}" data-orderfilter="confirmed">مؤكدة (${counts.confirmed})</button>
+      <button class="tab ${state.orderFilter==='cancelled'?'active':''}" data-orderfilter="cancelled">ملغية (${counts.cancelled})</button>
+    </div>
+  `;
+
+  const filtered = state.orders.filter(o => reviewStatus(o) === state.orderFilter);
+
+  const listHtml = filtered.length === 0
+    ? `<p class="hint center" style="padding:30px 0;">لا توجد حجوزات في هذا القسم.</p>`
+    : filtered.map(o => {
+      const orderImg = o.product_image ? '<img src="' + esc(o.product_image) + '">' : '<div class="ph"></div>';
+      const cannotSendToAlwaseet = !o.city_id || !o.region_id || o.alwaseet_status === 'sent';
+      return `
+        <div class="order-card">
+          <div class="order-top">
+            ${orderImg}
+            <div style="flex:1">
+              <div style="font-weight:600;font-size:14px;">${esc(o.product_name)} <span style="color:var(--muted);font-weight:400;">${o.qty ? `× ${o.qty}` : ''}</span></div>
+              <div style="font-size:11px;color:var(--muted);">${new Date(o.created_at).toLocaleString("ar")}</div>
+            </div>
+            <div style="font-weight:700;font-size:14px;">${o.total ? money(o.total) + ' د.ع' : ''}</div>
+          </div>
+          <div class="order-details">
+            <div>👤 ${esc(o.customer_name)}</div>
+            <div>📍 ${esc(o.address || o.location)}${o.city_name ? ` — ${esc(o.city_name)}${o.region_name ? " / " + esc(o.region_name) : ""}` : ""}</div>
+            <div>📞 <a href="https://wa.me/${formatWhatsapp(o.phone_number || o.phone)}" target="_blank" style="color:var(--ink);text-decoration:underline;">${esc(o.phone_number || o.phone)}</a></div>
+            ${o.instagram_username ? `<div>📷 <a href="https://instagram.com/${esc(o.instagram_username)}" target="_blank" style="color:var(--moss);text-decoration:underline;">@${esc(o.instagram_username)}</a></div>` : ""}
+            <div style="margin-top:6px;">${alwaseetStatusText(o)}</div>
+          </div>
+          <div class="order-actions">
+            <button class="btn-cancel" data-cancel="${o.id}" ${reviewStatus(o)==='cancelled' ? 'disabled' : ''}>✕ إلغاء</button>
+            <button class="btn-confirm" data-confirm="${o.id}" ${reviewStatus(o)==='confirmed' ? 'disabled' : ''}>✓ تم التأكيد</button>
+            <button class="btn-whatsapp" data-wa="${o.id}">💬 واتساب</button>
+            <button class="btn-alwaseet" data-sendalwaseet="${o.id}" ${cannotSendToAlwaseet ? 'disabled' : ''}>${o.alwaseet_status === 'sent' ? '✓ أُرسل للوسيط' : '🚚 إرسال إلى الوسيط'}</button>
+            ${isOwner ? `<button class="btn-delete" data-delorder="${o.id}">🗑 حذف</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+  body.innerHTML = filterTabsHtml + listHtml;
+
+  body.querySelectorAll("[data-orderfilter]").forEach(b => {
+    b.onclick = () => { state.orderFilter = b.dataset.orderfilter; renderOrdersTab(body); };
+  });
+
+  async function updateReviewStatus(orderId, status){
+    const order = state.orders.find(o => String(o.id) === String(orderId));
+    if (!order) return;
+    const { error } = await supabaseClient.from('orders').update({ review_status: status }).eq('id', orderId);
+    if (error) {
+      console.error("update review_status error", error);
+      showToast("تعذر تحديث حالة الطلب: " + (error.message || "خطأ غير معروف"), "err");
+      return;
+    }
+    order.review_status = status;
+    showToast(status === 'confirmed' ? "تم تأكيد الطلب" : "تم إلغاء الطلب");
+    renderOrdersTab(body);
+  }
+
+  body.querySelectorAll("[data-cancel]").forEach(b => {
+    b.onclick = () => updateReviewStatus(b.dataset.cancel, "cancelled");
+  });
+  body.querySelectorAll("[data-confirm]").forEach(b => {
+    b.onclick = () => updateReviewStatus(b.dataset.confirm, "confirmed");
+  });
+
+  body.querySelectorAll("[data-wa]").forEach(b => {
+    b.onclick = () => {
+      const o = state.orders.find(x => String(x.id) === String(b.dataset.wa));
+      if (!o) return;
+      const num = formatWhatsapp(o.assigned_staff_whatsapp || state.settings.whatsapp);
+      if (!num) { showToast("لا يوجد رقم واتساب متاح لإرسال هذا الطلب", "err"); return; }
+      const msg = `تفاصيل الحجز - QR CODE\nالمنتج: ${o.product_name}\nالعميل: ${o.customer_name}\nالهاتف: ${o.phone_number || o.phone || ""}\nالموقع: ${o.address || o.location || ""}${o.city_name ? ` (${o.city_name}${o.region_name ? " - " + o.region_name : ""})` : ""}\nالإجمالي: ${money(o.total)} د.ع`;
+      window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank");
+    };
+  });
+
+  body.querySelectorAll("[data-sendalwaseet]").forEach(b => {
     b.onclick = async () => {
-      const order = state.orders.find(o => String(o.id) === String(b.dataset.retry));
+      const order = state.orders.find(o => String(o.id) === String(b.dataset.sendalwaseet));
       if (!order) return;
       b.textContent = "جارِ الإرسال...";
       b.disabled = true;
@@ -826,14 +914,31 @@ function renderOrdersTab(body){
         showToast("تم إرسال الطلب إلى الوسيط بنجاح");
         renderOrdersTab(body);
       } catch (err) {
-        console.error("retry alwaseet error", err);
+        console.error("send alwaseet error", err);
         order.alwaseet_error = err.message || "خطأ غير معروف";
         await supabaseClient.from('orders').update({ alwaseet_status: 'failed', alwaseet_error: order.alwaseet_error }).eq('id', order.id);
-        showToast("فشلت إعادة المحاولة: " + order.alwaseet_error, "err");
+        showToast("فشل الإرسال للوسيط: " + order.alwaseet_error, "err");
         renderOrdersTab(body);
       }
     };
   });
+
+  if (isOwner) {
+    body.querySelectorAll("[data-delorder]").forEach(b => {
+      b.onclick = async () => {
+        if (!confirm("هل أنت متأكد من حذف هذا الطلب نهائيًا؟")) return;
+        const { error } = await supabaseClient.from('orders').delete().eq('id', b.dataset.delorder);
+        if (error) {
+          console.error("delete order error", error);
+          showToast("تعذر حذف الطلب: " + (error.message || "خطأ غير معروف"), "err");
+          return;
+        }
+        state.orders = state.orders.filter(o => String(o.id) !== String(b.dataset.delorder));
+        showToast("تم حذف الطلب");
+        renderOrdersTab(body);
+      };
+    });
+  }
 }
 
 function renderSettingsTab(body){
@@ -1106,6 +1211,7 @@ async function loadAll(){
 
 /* ======================= بدء التشغيل ======================= */
 async function init(){
+  initTheme();
   await loadAll();
   await loadSettings();
 

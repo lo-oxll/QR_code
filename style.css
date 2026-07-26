@@ -3,12 +3,14 @@
   --surface:#FFFFFF; --onyx:#0E1116; --err:#B3261E; --ok:#1F7A4D;
   --moss:#1B3A6B; --moss-dark:#12294D; /* كحلي (navy) كلون أساسي */
   --silver:#AAB1BC; --silver-dark:#888F99; /* فضي معدني */
+  --btn-border:#0E1116; /* إطار أسود بارز على الأزرار في الوضع النهاري */
 }
 [data-theme="dark"]{
   --bg:#0A0D13; --ink:#EDEFF3; --card:#11151E; --line:#232838; --muted:#8B93A1;
   --surface:#141826; --onyx:#0E1116; --err:#E5534B; --ok:#3FA872;
   --moss:#5C8AE6; --moss-dark:#4472CE;
   --silver:#C7CCD3; --silver-dark:#9AA1AB;
+  --btn-border:#FFFFFF; /* إطار أبيض بارز على الأزرار في الوضع الليلي */
 }
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Cairo',sans-serif;-webkit-font-smoothing:antialiased;transition:background .25s ease, color .25s ease;}
@@ -42,7 +44,7 @@ h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relativ
 .social-btn{
   width:46px;height:46px;border-radius:50%;background:var(--onyx);color:#fff;
   display:flex;align-items:center;justify-content:center;
-  border:2px solid var(--silver);transition:transform .25s cubic-bezier(.2,.8,.2,1), background .25s, box-shadow .25s;
+  border:2px solid var(--btn-border);transition:transform .25s cubic-bezier(.2,.8,.2,1), background .25s, box-shadow .25s;
   box-shadow:0 6px 16px rgba(14,17,22,.2);
 }
 .social-btn:hover{background:var(--moss);transform:translateY(-3px);box-shadow:0 10px 22px rgba(27,58,107,.35);}
@@ -69,7 +71,7 @@ h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relativ
 .card h3{margin:0;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .card p{margin:2px 0 0;font-size:12px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.5;max-height:3em;}
 .book-btn{
-  display:block;width:100%;border:2px solid var(--silver);padding:13px;font-weight:700;font-size:14px;
+  display:block;width:100%;border:2px solid var(--btn-border);padding:13px;font-weight:700;font-size:14px;
   background:var(--onyx);color:#FFFFFF;cursor:pointer;letter-spacing:.02em;font-family:'Cairo',sans-serif;
   transition:background .25s;
 }
@@ -77,7 +79,7 @@ h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relativ
 .fab{
   position:fixed;bottom:20px;left:20px;width:44px;height:44px;border-radius:50%;
   background:var(--onyx);color:#FFFFFF;display:flex;align-items:center;justify-content:center;
-  cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);border:2px solid var(--silver);transition:transform .25s, background .25s;
+  cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);border:2px solid var(--btn-border);transition:transform .25s, background .25s;
   z-index:40;
 }
 .fab:hover{transform:scale(1.08) rotate(-6deg);background:var(--moss-dark);}
@@ -85,7 +87,7 @@ h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relativ
 /* زر الوضع الليلي/النهاري — تفضيل شخصي محفوظ في هذا المتصفح فقط، لا يؤثر على أي مستخدم آخر */
 .theme-toggle{
   position:fixed;bottom:20px;right:20px;width:44px;height:44px;border-radius:50%;
-  background:var(--surface);color:var(--ink);border:2px solid var(--silver-dark);
+  background:var(--surface);color:var(--ink);border:2px solid var(--btn-border);
   display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;
   box-shadow:0 4px 14px rgba(0,0,0,.15);transition:transform .25s, background .25s;z-index:40;
 }
@@ -105,7 +107,7 @@ h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relativ
 .product-preview .ph{width:56px;height:56px;border-radius:10px;background:var(--line);}
 .qty-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
 .qty-ctl{display:flex;align-items:center;gap:12px;}
-.qty-ctl button{width:30px;height:30px;border-radius:50%;border:2px solid var(--silver);background:var(--onyx);color:#fff;cursor:pointer;font-size:16px;transition:background .2s;}
+.qty-ctl button{width:30px;height:30px;border-radius:50%;border:2px solid var(--btn-border);background:var(--onyx);color:#fff;cursor:pointer;font-size:16px;transition:background .2s;}
 .qty-ctl button:hover{background:var(--moss);}
 .field{margin-bottom:12px;}
 .field .box{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 14px;transition:border-color .2s;}
@@ -120,14 +122,14 @@ h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relativ
 .street-chip:hover{background:var(--line);}
 .total-row{display:flex;justify-content:space-between;padding:0 2px;margin:18px 0 14px;font-weight:700;}
 .primary-btn{
-  width:100%;border:2px solid var(--silver);padding:14px;border-radius:12px;background:var(--onyx);color:#FFFFFF;
+  width:100%;border:2px solid var(--btn-border);padding:14px;border-radius:12px;background:var(--onyx);color:#FFFFFF;
   font-weight:700;cursor:pointer;font-family:'Cairo',sans-serif;font-size:15px;
   transition:background .25s, transform .15s;
 }
 .primary-btn:hover:not(:disabled){background:var(--moss);}
 .primary-btn:active:not(:disabled){transform:scale(.98);}
 .primary-btn:disabled{opacity:.6;cursor:default;}
-.dark-btn{width:100%;border:2px solid var(--silver);padding:12px;border-radius:12px;background:var(--onyx);color:#FFFFFF;font-weight:700;cursor:pointer;font-family:'Cairo',sans-serif;font-size:14px;transition:background .25s;}
+.dark-btn{width:100%;border:2px solid var(--btn-border);padding:12px;border-radius:12px;background:var(--onyx);color:#FFFFFF;font-weight:700;cursor:pointer;font-family:'Cairo',sans-serif;font-size:14px;transition:background .25s;}
 .dark-btn:hover:not(:disabled){background:var(--moss-dark);}
 .dark-btn:disabled{opacity:.6;cursor:default;}
 .ghost-btn{width:100%;border:2px solid var(--line);padding:12px;background:none;color:var(--muted);cursor:pointer;font-family:'Cairo',sans-serif;font-size:14px;transition:color .2s, border-color .2s;}
@@ -167,7 +169,7 @@ h1.brand{font-size:46px;margin:0;line-height:1;color:var(--ink);position:relativ
 
 .order-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
 .order-actions button{
-  flex:1 1 auto;min-width:100px;border:2px solid rgba(255,255,255,.55);padding:9px 10px;border-radius:10px;
+  flex:1 1 auto;min-width:100px;border:2px solid var(--btn-border);padding:9px 10px;border-radius:10px;
   font-size:12px;font-weight:700;cursor:pointer;font-family:'Cairo',sans-serif;
   transition:transform .15s, opacity .2s, filter .2s;color:#fff;
 }

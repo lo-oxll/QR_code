@@ -495,6 +495,10 @@ function openBookingModal(){
     const btn = document.getElementById("submitOrder");
     btn.disabled = true; btn.textContent = "جارِ الإرسال...";
 
+    // نفتح نافذة واتساب فارغة الآن (أثناء نقرة الزر مباشرة)، ونملأ رابطها لاحقًا بعد جهوزية
+    // بيانات الطلب — لأن أغلب المتصفحات تمنع فتح نافذة جديدة تلقائيًا بعد أي عملية غير متزامنة (await)
+    const waWindow = window.open("", "_blank");
+
     const total = qty * Number(p.price);
     const cityName = vals.cityName;
     const regionName = vals.regionName;
@@ -524,6 +528,7 @@ function openBookingModal(){
 
     if (error) {
       console.error("Database insert error:", error);
+      if (waWindow) waWindow.close();
       showToast("تعذر حفظ الحجز: " + (error.message || "خطأ غير معروف"), "err");
       btn.disabled = false; btn.textContent = "تأكيد الحجز";
       return;
@@ -569,8 +574,24 @@ function openBookingModal(){
     const num = formatWhatsapp(assignedWhatsapp || state.settings.whatsapp);
     if (num){
       const msg = `حجز جديد من QR CODE\nالمنتج: ${p.name}\nالكمية: ${qty}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
-      window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank");
+      const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+      if (waWindow) { waWindow.location.href = waUrl; }
+      else { window.open(waUrl, "_blank"); } // احتياط لو حظر المتصفح النافذة المفتوحة مسبقًا لأي سبب
+
+      // شاشة انتظار داخل المودال نفسه بدل إغلاقه فورًا، لتوضيح أن الحجز أُرسل
+      // ويجب على الزبون إرسال رسالة الواتساب المفتوحة وانتظار رد المتجر لتأكيد الطلب
+      modalBg.querySelector(".modal").innerHTML = `
+        <div class="center" style="padding:6px 0;">
+          <div class="seal" style="margin:0 auto 16px;">✓</div>
+          <h2 style="margin-bottom:8px;">تم إرسال حجزك</h2>
+          <p class="hint" style="margin-bottom:22px;">فتحنا لك محادثة واتساب برسالة تحتوي كل تفاصيل طلبك — أرسلها الآن، وانتظر رد المتجر لتأكيد الحجز.</p>
+          <button class="primary-btn" id="closeWaitBtn">تم</button>
+        </div>
+      `;
+      document.getElementById("closeWaitBtn").onclick = () => { closeModal(); render(); };
+      return;
     }
+    if (waWindow) waWindow.close(); // لا يوجد رقم واتساب مُعرَّف أصلًا في الإعدادات، أغلق النافذة الفارغة
     showToast("تم إرسال الحجز بنجاح، سيتم التواصل معك قريبًا");
     closeModal();
     render();

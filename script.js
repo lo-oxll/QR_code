@@ -312,7 +312,7 @@ function renderStore(){
       <div class="card">
         <div class="img">${imgTag}</div>
         <div class="body">
-          <div class="seal">${money(p.price)}<br>د.ع</div>
+          <div class="seal">${money(p.price)}<br><span class="currency" aria-label="دينار">&#xE900;</span></div>
           <div class="info">
             <h3>${esc(p.name)}</h3>
             ${p.description ? `<p>${esc(p.description)}</p>` : ""}
@@ -387,7 +387,7 @@ function openBookingModal(){
           ${modalImg}
           <div>
             <div style="font-weight:600">${esc(p.name)}</div>
-            <div style="font-size:13px;color:var(--muted)">${money(p.price)} د.ع للقطعة</div>
+            <div style="font-size:13px;color:var(--muted)">${money(p.price)} <span class="currency" aria-label="دينار">&#xE900;</span> للقطعة</div>
           </div>
         </div>
         <div class="qty-row">
@@ -414,7 +414,7 @@ function openBookingModal(){
         ${citiesFailed ? "" : `<div id="streetChips" class="street-chips"></div>`}
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
         <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام" value="${esc(vals.instagram)}" dir="ltr"></div><div class="err" id="errInsta"></div></div>
-        <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(total)} د.ع</span></div>
+        <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(total)} <span class="currency" aria-label="دينار">&#xE900;</span></span></div>
         <button class="primary-btn" id="submitOrder">تأكيد الحجز</button>
       </div>
     `;
@@ -776,7 +776,7 @@ function renderProductsReadOnly(body){
     return `
       <div class="prod-row">
         ${prodImg}
-        <div class="info"><h4>${esc(p.name)}</h4><p>${money(p.price)} د.ع${p.description ? " · " + esc(p.description) : ""}</p></div>
+        <div class="info"><h4>${esc(p.name)}</h4><p>${money(p.price)} <span class="currency" aria-label="دينار">&#xE900;</span>${p.description ? " · " + esc(p.description) : ""}</p></div>
       </div>
     `;
   }).join("");
@@ -903,7 +903,7 @@ function renderProductsTab(body){
       return `
         <div class="prod-row">
           ${prodImg}
-          <div class="info"><h4>${esc(p.name)}</h4><p>${money(p.price)} د.ع</p></div>
+          <div class="info"><h4>${esc(p.name)}</h4><p>${money(p.price)} <span class="currency" aria-label="دينار">&#xE900;</span></p></div>
           <button class="del-btn" data-del="${p.id}">🗑</button>
         </div>
       `;
@@ -992,7 +992,7 @@ function renderOrdersTab(body){
               <div style="font-weight:600;font-size:14px;">${esc(o.product_name)} <span style="color:var(--muted);font-weight:400;">${o.qty ? `× ${o.qty}` : ''}</span></div>
               <div style="font-size:11px;color:var(--muted);">${new Date(o.created_at).toLocaleString("ar")}</div>
             </div>
-            <div style="font-weight:700;font-size:14px;">${o.total ? money(o.total) + ' د.ع' : ''}</div>
+            <div style="font-weight:700;font-size:14px;">${o.total ? money(o.total) + ' <span class="currency" aria-label="دينار">&#xE900;</span>' : ''}</div>
           </div>
           <div class="order-details">
             <div>👤 ${esc(o.customer_name)}</div>

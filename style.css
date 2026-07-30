@@ -14,11 +14,13 @@
 }
 @font-face{
   font-family:"GoldDinarCurrency";
-  src:url("GoldDinarCurrency.woff") format("woff"),
-      url("GoldDinarCurrency.ttf") format("truetype");
+  src:url("data:font/woff;base64,d09GRgABAAAAAAOsAAoAAAAABMgAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAABPUy8yAAABZAAAAC4AAABgRQE87WNtYXAAAAGgAAAAMQAAADzR8RedZ2x5ZgAAAdwAAADzAAABKi/O985oZWFkAAAA9AAAADYAAAA2LuwgBGhoZWEAAAEsAAAAHgAAACQFpQKsaG10eAAAAZQAAAAMAAAADAb0ADdsb2NhAAAB1AAAAAgAAAAIAA0Aom1heHAAAAFMAAAAGAAAACAACQB0bmFtZQAAAtAAAADJAAABm9BmUCtwb3N0AAADnAAAABAAAAAoAAgAvQABAAAAAQAAAAMUcl8PPPUAAQPoAAAAAOaQ7jAAAAAA5pDuOAAyAAAChAK8AAAAAwACAAAAAAAAeJxjYGRgYFb4bwEkeRgYGFKYmhmAIiiAGQA8ZAJYAAB4nGNgZGBgYGYoYmBlAAEmBjQAAAxHAH54nGNgZgpknMDAysDCQBgwCiBx7IEASCm8ZGBW+G/BACQZTqCpV2BgAADR5gVsAAAB9AAAAfQAAAMMADd4nGNgYGBiYGBgBmIRIMkIplkYNIA0G5BmBMoqvGT4/x/IB9P/H4ozgVUBAQCXCAhzAAAAAAAADQANAJV4nC2OO07EMBCGZ5z4NY6dh+NQoogWCWmjSGgbpByBjoICEAUFAlpqDsA2NIhrUFFxEG6yKybZ9WgsjfzN5x8QVgD4K34gAxj6ul/h++6ZR5BwDqfiTXzCDdzDAzzCC5PDcUqp7MaLbhzPjob6JHJnfVoKL9u2jTE2TV1VpfcFkdFKZkJkUmlDVHhfVlXdNAwxGoIPnrGiIGetMUrJnGHGc6mUMdY64kdGGAzf0/Q6TX94t/uaW3yIPD9YQzhYW9amOIdYMvAHjs1asRavETkHr2hjiZzbi+fD9xLDOSJrtF5iIN5uN+Jpu8GrdbeGf5RtIasAeJyFjT8KwjAUh7/aqoji4CDolMHVUsUbKLg4OehctEghNJDSoXgCL+BlPJRX8LVGhzr4Asn3fn8IMOCORzUeo/qupkVXtjf7TOS8OWDK0nGbPjvHnTrj4wU9UWYcHbcYcnXsS/PmOGDFw3GbMU/HnSqzNfq8SbPYqnVhbZKdyn1yKXRsv8ZHnzeNb0M555DYPDWZWoQRWwyaMxtSMmIsijWFvJZElBMle6GLaLr2fxvN/Pxv4/cP1egcZLPk0jCSUCwIiV7QZ0iDAAAAeJxjYGLAD5jBeC8AAVEAxg==") format("woff");
   font-weight:normal;font-style:normal;font-display:swap;
 }
-.currency{font-family:"GoldDinarCurrency";}
+.currency-fallback{}
+.currency-icon{display:none;font-family:"GoldDinarCurrency";}
+html.currency-font-ready .currency-fallback{display:none;}
+html.currency-font-ready .currency-icon{display:inline;}
 
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Cairo',sans-serif;-webkit-font-smoothing:antialiased;transition:background .25s ease, color .25s ease;}

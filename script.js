@@ -312,7 +312,7 @@ function renderStore(){
       <div class="card">
         <div class="img">${imgTag}</div>
         <div class="body">
-          <div class="seal">${money(p.price)}<br><span class="currency-fallback">د.ع</span><span class="currency-icon" aria-label="دينار">&#xE900;</span></div>
+          <div class="seal">${money(p.price)} <span class="currency-fallback">د.ع</span><span class="currency-icon" aria-label="دينار">&#xE900;</span></div>
           <div class="info">
             <h3>${esc(p.name)}</h3>
             ${p.description ? `<p>${esc(p.description)}</p>` : ""}

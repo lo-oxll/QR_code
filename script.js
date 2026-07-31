@@ -152,6 +152,7 @@ let state = {
   orders: [],
   settings: { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "" },
   selectedProduct: null,
+  selectedVariant: null, // { colorName, size } يُملأ عند الضغط على "احجز الآن" من بطاقة المنتج
   // بيانات المشرف الحالي (owner أو staff) - محفوظة في الذاكرة فقط لهذه الجلسة، لا تُخزَّن على القرص
   currentAdmin: null, // { username, role, passwordHash }
   staffList: [],
@@ -164,6 +165,21 @@ const modalBg = document.getElementById("modalBg");
 
 function esc(s){ return (s ?? "").toString().replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function money(n){ return Number(n||0).toLocaleString("ar"); }
+
+// يحوّل حقل sizes النصي (مثل "S,M,L") إلى مصفوفة قياسات نظيفة، ويتجاهله بأمان إن كان غير معرّف أصلًا
+function parseSizes(p){
+  return String(p?.sizes || "").split(",").map(s => s.trim()).filter(Boolean);
+}
+// يعيد مصفوفة الألوان المتوفرة للمنتج (فارغة إن لم تُضَف أي ألوان)، بأمان حتى لو كان العمود غير موجود بعد بقاعدة البيانات
+function parseColors(p){
+  return Array.isArray(p?.colors) ? p.colors : [];
+}
+// حالة اللون/القياس/الإطار الحالي المختار لكل منتج على واجهة المتجر (تفاعل فوري بدون إعادة رسم كاملة)
+const productVariantState = {};
+function getVariantState(pid){
+  if (!productVariantState[pid]) productVariantState[pid] = { colorIdx: 0, size: null, frame: 0 };
+  return productVariantState[pid];
+}
 
 function showToast(text, kind="ok"){
   const host = document.getElementById("toastHost");
@@ -307,10 +323,40 @@ function render(){
 
 function renderStore(){
   const items = state.products.map(p => {
-    const imgTag = p.image ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" style="object-position:${esc(p.image_position || '50% 50%')};">` : '🖨️';
+    const colors = parseColors(p);
+    const sizes = parseSizes(p);
+    const vs = getVariantState(p.id);
+    if (vs.colorIdx >= colors.length) vs.colorIdx = 0;
+
+    // الصورة المعروضة: صورة اللون المختار حاليًا (وإطارها الحالي إن كانت 3D) إن وُجدت ألوان، وإلا صورة المنتج الأساسية
+    const activeColor = colors[vs.colorIdx] || null;
+    const activeImages = activeColor?.images?.length ? activeColor.images : (p.image ? [p.image] : []);
+    if (vs.frame >= activeImages.length) vs.frame = 0;
+    const shownImage = activeImages[vs.frame] || "";
+    const is3d = activeColor?.type === "3d" && activeImages.length > 1;
+
+    const imgTag = shownImage
+      ? `<img id="img-${esc(p.id)}" src="${esc(shownImage)}" alt="${esc(p.name)}" style="object-position:${esc(p.image_position || '50% 50%')};" draggable="false">`
+      : '🖨️';
+
+    const colorRow = colors.length ? `
+      <div class="color-row" data-colors="${esc(p.id)}">
+        ${colors.map((c,i) => `<button type="button" class="color-dot ${i===vs.colorIdx?'active':''}" data-cidx="${i}" style="background:${esc(c.hex||'#ccc')}" title="${esc(c.name||'')}"></button>`).join("")}
+      </div>` : "";
+
+    const sizeRow = sizes.length ? `
+      <div class="size-row" data-sizes="${esc(p.id)}">
+        ${sizes.map(s => `<button type="button" class="size-chip ${vs.size===s?'active':''}" data-size="${esc(s)}">${esc(s)}</button>`).join("")}
+      </div>` : "";
+
     return `
-      <div class="card">
-        <div class="img">${imgTag}</div>
+      <div class="card" data-pid="${esc(p.id)}">
+        <div class="img" id="imgwrap-${esc(p.id)}">
+          ${imgTag}
+          ${is3d ? `<span class="rotate-badge" title="اسحب يمينًا أو يسارًا للتدوير">🔄 اسحب للتدوير</span>` : ""}
+        </div>
+        ${colorRow}
+        ${sizeRow}
         <div class="body">
           <div class="seal">${money(p.price)} <span class="currency-fallback">د.ع</span><span class="currency-icon" aria-label="دينار">&#xE900;</span></div>
           <div class="info">
@@ -318,7 +364,7 @@ function renderStore(){
             ${p.description ? `<p>${esc(p.description)}</p>` : ""}
           </div>
         </div>
-        <button class="book-btn" data-book="${p.id}">احجز الآن</button>
+        <button class="book-btn" data-book="${esc(p.id)}">احجز الآن</button>
       </div>
     `;
   }).join("");
@@ -350,9 +396,112 @@ function renderStore(){
     <button class="fab" id="adminFab" title="دخول الإدارة">🔒</button>
   `;
 
+  // --- تفاعل الألوان: النقر على أي لون يبدّل صورة البطاقة فورًا دون إعادة رسم الصفحة كاملة ---
+  app.querySelectorAll("[data-colors]").forEach(row => {
+    const pid = row.dataset.colors;
+    const p = state.products.find(x => String(x.id) === String(pid));
+    if (!p) return;
+    const colors = parseColors(p);
+    row.querySelectorAll("[data-cidx]").forEach(dot => {
+      dot.addEventListener("click", () => {
+        const vs = getVariantState(pid);
+        vs.colorIdx = Number(dot.dataset.cidx);
+        vs.frame = 0;
+        row.querySelectorAll("[data-cidx]").forEach(d => d.classList.remove("active"));
+        dot.classList.add("active");
+        const color = colors[vs.colorIdx];
+        const images = color?.images?.length ? color.images : (p.image ? [p.image] : []);
+        const imgEl = document.getElementById(`img-${pid}`);
+        if (imgEl && images.length) imgEl.src = images[0];
+        const wrap = document.getElementById(`imgwrap-${pid}`);
+        const existingBadge = wrap.querySelector(".rotate-badge");
+        const is3d = color?.type === "3d" && images.length > 1;
+        if (is3d && !existingBadge) {
+          wrap.insertAdjacentHTML("beforeend", `<span class="rotate-badge" title="اسحب يمينًا أو يسارًا للتدوير">🔄 اسحب للتدوير</span>`);
+        } else if (!is3d && existingBadge) {
+          existingBadge.remove();
+        }
+      });
+    });
+  });
+
+  // --- تفاعل القياسات: اختيار قياس واحد فقط لكل منتج ---
+  app.querySelectorAll("[data-sizes]").forEach(row => {
+    const pid = row.dataset.sizes;
+    row.querySelectorAll("[data-size]").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const vs = getVariantState(pid);
+        vs.size = vs.size === chip.dataset.size ? null : chip.dataset.size;
+        row.querySelectorAll("[data-size]").forEach(c => c.classList.remove("active"));
+        if (vs.size) chip.classList.add("active");
+      });
+    });
+  });
+
+  // --- تدوير 3D: سحب أفقي فوق صورة أي لون معلَّم كـ 3D يبدّل بين إطاراتها (يحاكي تقليب المنتج) ---
+  app.querySelectorAll(".card").forEach(card => {
+    const pid = card.dataset.pid;
+    const p = state.products.find(x => String(x.id) === String(pid));
+    if (!p) return;
+    const wrap = card.querySelector(".img");
+    if (!wrap) return;
+    let dragging = false, startX = 0, startFrame = 0;
+    function currentImages(){
+      const vs = getVariantState(pid);
+      const color = parseColors(p)[vs.colorIdx];
+      return (color?.type === "3d" && color.images?.length > 1) ? color.images : null;
+    }
+    function pointerX(e){ return (e.touches ? e.touches[0] : e).clientX; }
+    function onDown(e){
+      const images = currentImages();
+      if (!images) return;
+      dragging = true;
+      startX = pointerX(e);
+      startFrame = getVariantState(pid).frame;
+      e.preventDefault();
+    }
+    function onMove(e){
+      if (!dragging) return;
+      const images = currentImages();
+      if (!images) return;
+      const dx = pointerX(e) - startX;
+      const step = 18; // كل 18px سحب = إطار واحد
+      const delta = Math.round(dx / step);
+      const vs = getVariantState(pid);
+      let next = (startFrame - delta) % images.length;
+      if (next < 0) next += images.length;
+      if (next !== vs.frame) {
+        vs.frame = next;
+        const imgEl = document.getElementById(`img-${pid}`);
+        if (imgEl) imgEl.src = images[next];
+      }
+    }
+    function onUp(){ dragging = false; }
+    wrap.addEventListener("mousedown", onDown);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    wrap.addEventListener("touchstart", onDown, { passive:false });
+    window.addEventListener("touchmove", onMove, { passive:true });
+    window.addEventListener("touchend", onUp);
+  });
+
   app.querySelectorAll("[data-book]").forEach(btn => {
     btn.addEventListener("click", () => {
-      state.selectedProduct = state.products.find(p => p.id === btn.dataset.book);
+      const pid = btn.dataset.book;
+      const p = state.products.find(x => String(x.id) === pid);
+      const sizes = parseSizes(p);
+      const vs = getVariantState(pid);
+      if (sizes.length && !vs.size) {
+        showToast("الرجاء اختيار القياس أولًا", "err");
+        return;
+      }
+      const colors = parseColors(p);
+      const activeColor = colors[vs.colorIdx] || null;
+      state.selectedProduct = p;
+      state.selectedVariant = {
+        colorName: activeColor?.name || null,
+        size: vs.size || null
+      };
       openBookingModal();
     });
   });
@@ -365,6 +514,13 @@ function renderStore(){
 /* ---------- نافذة الحجز ---------- */
 function openBookingModal(){
   const p = state.selectedProduct;
+  const variant = state.selectedVariant || {};
+  const variantParts = [];
+  if (variant.colorName) variantParts.push(`اللون: ${variant.colorName}`);
+  if (variant.size) variantParts.push(`القياس: ${variant.size}`);
+  const variantLine = variantParts.length
+    ? `<div style="font-size:12px;color:var(--moss);font-weight:700;margin-top:2px;">${esc(variantParts.join(" · "))}</div>`
+    : "";
   let qty = 1;
   let cities = [];
   let regions = [];
@@ -388,6 +544,7 @@ function openBookingModal(){
           <div>
             <div style="font-weight:600">${esc(p.name)}</div>
             <div style="font-size:13px;color:var(--muted)">${money(p.price)} <span class="currency-fallback">د.ع</span><span class="currency-icon" aria-label="دينار">&#xE900;</span> للقطعة</div>
+            ${variantLine}
           </div>
         </div>
         <div class="qty-row">
@@ -556,7 +713,7 @@ function openBookingModal(){
           customer_name: name,
           phone_number: phone,
           address: loc,
-          product_name: `${p.name} (عدد: ${qty})`,
+          product_name: `${p.name}${variantParts.length ? " - " + variantParts.join(" - ") : ""} (عدد: ${qty})`,
           city_id: cityId || null,
           region_id: regionId || null,
           city_name: cityName || null,
@@ -617,7 +774,7 @@ function openBookingModal(){
     // وإلا يُستخدم الرقم العام المشترك من الإعدادات كخطة بديلة
     const num = formatWhatsapp(assignedWhatsapp || state.settings.whatsapp);
     if (num){
-      const msg = `حجز جديد من QR CODE\nالمنتج: ${p.name}\nالكمية: ${qty}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
+      const msg = `حجز جديد من QR CODE\nالمنتج: ${p.name}${variant.colorName ? `\nاللون: ${variant.colorName}` : ""}${variant.size ? `\nالقياس: ${variant.size}` : ""}\nالكمية: ${qty}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
       if (waWindow) { waWindow.location.href = waUrl; }
       else { window.open(waUrl, "_blank"); } // احتياط لو حظر المتصفح النافذة المفتوحة مسبقًا لأي سبب
@@ -785,6 +942,11 @@ function renderProductsReadOnly(body){
 function renderProductsTab(body){
   let pendingImage = null;
   let pendingPos = { x: 50, y: 50 }; // نسبة موضع الصورة داخل الإطار (لضبط أي جزء منها يظهر)
+  const AVAILABLE_SIZES = ["S","M","L","XL","XXL"];
+  let pendingSizes = new Set();
+  let pendingColors = []; // { name, hex, type: 'normal'|'3d', images: [dataURL,...] }
+  let colorDraftImages = []; // صور اللون الجاري إضافته حاليًا قبل الضغط على "أضف اللون"
+
   body.innerHTML = `
     <div class="panel">
       <h3>إضافة منتج جديد</h3>
@@ -796,6 +958,26 @@ function renderProductsTab(body){
       <input class="plain-input" id="pPrice" placeholder="السعر (د.ع)" inputmode="numeric">
       <div class="err" id="errPPrice" style="margin:-6px 0 10px;"></div>
       <textarea class="plain-textarea" id="pDesc" placeholder="وصف مختصر (اختياري)" rows="2"></textarea>
+
+      <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">القياسات المتوفرة (اختياري)</p>
+      <div class="size-row" id="sizeBuilder" style="margin-bottom:16px;">
+        ${AVAILABLE_SIZES.map(s => `<button type="button" class="size-chip" data-sz="${s}">${s}</button>`).join("")}
+      </div>
+
+      <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">الألوان المتوفرة (اختياري)</p>
+      <div class="color-builder">
+        <input class="plain-input" id="cName" placeholder="اسم اللون (مثال: أبيض)">
+        <div class="color-builder-row">
+          <input type="color" id="cHex" value="#000000">
+          <label class="ghost-btn" style="flex:1;text-align:center;cursor:pointer;" id="cFilesLabel">📷 إضافة صورة/صور اللون</label>
+          <input type="file" id="cFiles" accept="image/*" multiple style="display:none">
+        </div>
+        <p class="hint" style="margin:2px 0 10px;">صورة واحدة = عرض عادي. عدة صور متتابعة (بزوايا مختلفة) = تفعيل تلقائي لوضع 3D التفاعلي (سحب لتقليب المنتج).</p>
+        <div id="colorDraftThumbs" class="color-thumbs"></div>
+        <button type="button" class="dark-btn" id="addColorBtn" style="margin-bottom:14px;">+ أضف هذا اللون</button>
+      </div>
+      <div id="pendingColorsList" class="color-thumbs" style="margin-bottom:16px;"></div>
+
       <button class="primary-btn" id="addBtn">+ إضافة المنتج</button>
     </div>
     <div id="prodList"></div>
@@ -803,6 +985,75 @@ function renderProductsTab(body){
 
   const uploadBox = document.getElementById("uploadBox");
   const dragHint = document.getElementById("dragHint");
+
+  // --- القياسات: تبديل تحديد كل قياس عند الضغط ---
+  document.querySelectorAll("#sizeBuilder [data-sz]").forEach(chip => {
+    chip.onclick = () => {
+      const sz = chip.dataset.sz;
+      if (pendingSizes.has(sz)) { pendingSizes.delete(sz); chip.classList.remove("active"); }
+      else { pendingSizes.add(sz); chip.classList.add("active"); }
+    };
+  });
+
+  // --- بناء الألوان: اختيار صورة/صور اللون الجاري إضافته ---
+  const cFilesLabel = document.getElementById("cFilesLabel");
+  const cFiles = document.getElementById("cFiles");
+  cFilesLabel.onclick = () => cFiles.click();
+  cFiles.onchange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    for (const f of files) {
+      const dataUrl = await resizeImage(f, 560, 0.7);
+      colorDraftImages.push(dataUrl);
+    }
+    paintColorDraftThumbs();
+    cFiles.value = "";
+  };
+
+  function paintColorDraftThumbs(){
+    const el = document.getElementById("colorDraftThumbs");
+    el.innerHTML = colorDraftImages.map((src,i) => `
+      <div class="color-thumb">
+        <img src="${src}">
+        <button type="button" data-rmdraft="${i}">✕</button>
+      </div>
+    `).join("");
+    el.querySelectorAll("[data-rmdraft]").forEach(b => {
+      b.onclick = () => { colorDraftImages.splice(Number(b.dataset.rmdraft), 1); paintColorDraftThumbs(); };
+    });
+  }
+
+  function paintPendingColorsList(){
+    const el = document.getElementById("pendingColorsList");
+    if (!pendingColors.length) { el.innerHTML = ""; return; }
+    el.innerHTML = pendingColors.map((c,i) => `
+      <div class="color-thumb">
+        <img src="${c.images[0]}">
+        <span class="color-thumb-dot" style="background:${esc(c.hex)}"></span>
+        <span class="color-thumb-name">${esc(c.name)}${c.type==="3d" ? " · 3D" : ""}</span>
+        <button type="button" data-rmcolor="${i}">✕</button>
+      </div>
+    `).join("");
+    el.querySelectorAll("[data-rmcolor]").forEach(b => {
+      b.onclick = () => { pendingColors.splice(Number(b.dataset.rmcolor), 1); paintPendingColorsList(); };
+    });
+  }
+
+  document.getElementById("addColorBtn").onclick = () => {
+    const name = document.getElementById("cName").value.trim();
+    const hex = document.getElementById("cHex").value;
+    if (!name) { showToast("أدخل اسم اللون", "err"); return; }
+    if (!colorDraftImages.length) { showToast("أضف صورة واحدة على الأقل لهذا اللون", "err"); return; }
+    pendingColors.push({
+      name, hex,
+      type: colorDraftImages.length > 1 ? "3d" : "normal",
+      images: [...colorDraftImages]
+    });
+    colorDraftImages = [];
+    document.getElementById("cName").value = "";
+    paintColorDraftThumbs();
+    paintPendingColorsList();
+  };
 
   function paintUploadBox(){
     uploadBox.innerHTML = `<img id="posImg" src="${pendingImage}" style="object-position:${pendingPos.x}% ${pendingPos.y}%;cursor:grab;">`;
@@ -879,6 +1130,8 @@ function renderProductsTab(body){
 
     const row = { name, price: Number(price), description: desc, image: pendingImage };
     if (pendingImage) row.image_position = `${pendingPos.x}% ${pendingPos.y}%`;
+    if (pendingSizes.size) row.sizes = [...pendingSizes].join(",");
+    if (pendingColors.length) row.colors = pendingColors;
 
     const { error } = await supabaseClient.from('products').insert([row]);
 
@@ -900,10 +1153,15 @@ function renderProductsTab(body){
   } else {
     list.innerHTML = state.products.map(p => {
       const prodImg = p.image ? '<img src="' + esc(p.image) + '" style="object-position:' + esc(p.image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
+      const colors = parseColors(p);
+      const sizes = parseSizes(p);
+      const variantBits = [];
+      if (colors.length) variantBits.push(`${colors.length} ألوان`);
+      if (sizes.length) variantBits.push(sizes.join("/"));
       return `
         <div class="prod-row">
           ${prodImg}
-          <div class="info"><h4>${esc(p.name)}</h4><p>${money(p.price)} <span class="currency-fallback">د.ع</span><span class="currency-icon" aria-label="دينار">&#xE900;</span></p></div>
+          <div class="info"><h4>${esc(p.name)}</h4><p>${money(p.price)} <span class="currency-fallback">د.ع</span><span class="currency-icon" aria-label="دينار">&#xE900;</span>${variantBits.length ? " · " + esc(variantBits.join(" · ")) : ""}</p></div>
           <button class="del-btn" data-del="${p.id}">🗑</button>
         </div>
       `;

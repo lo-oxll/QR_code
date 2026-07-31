@@ -21,10 +21,10 @@
 .currency-icon{
   display:none;
   font-family:"GoldDinarCurrency";
-  font-size:1.3em;
-  vertical-align:-0.09em;
+  font-size:1.45em;
+  vertical-align:-0.1em;
   letter-spacing:0;
-  -webkit-text-stroke:0.3px currentColor;
+  -webkit-text-stroke:0.35px currentColor;
 }
 html.currency-font-ready .currency-fallback{display:none;}
 html.currency-font-ready .currency-icon{display:inline;}
@@ -88,15 +88,15 @@ h1.brand{font-size:clamp(26px,7vw,46px);margin:0;line-height:1;color:var(--ink);
 .card:hover .img img{transform:scale(1.07) rotate(.3deg);}
 .card .body{padding:14px;display:flex;align-items:center;gap:12px;flex:1 1 auto;}
 .seal{
-  width:66px;height:66px;border-radius:50%;background:var(--onyx);color:#FFFFFF;
+  width:72px;height:72px;border-radius:50%;background:var(--onyx);color:#FFFFFF;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  border:2px dashed var(--silver);font-size:13px;font-weight:700;text-align:center;
+  border:2px dashed var(--silver);font-size:14px;font-weight:700;text-align:center;
   padding:2px;line-height:1.2;
 }
 .seal .currency-icon{
-  font-size:1.4em;
-  vertical-align:-0.08em;
-  -webkit-text-stroke:0.4px #FFFFFF;
+  font-size:1.65em;
+  vertical-align:-0.1em;
+  -webkit-text-stroke:0.55px #FFFFFF;
 }
 .card .info{flex:1;min-width:0;}
 .card h3{margin:0;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}

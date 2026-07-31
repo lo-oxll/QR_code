@@ -24,7 +24,7 @@
   font-size:1.45em;
   vertical-align:-0.1em;
   letter-spacing:0;
-  -webkit-text-stroke:0.35px currentColor;
+  -webkit-text-stroke:0.15px currentColor;
 }
 html.currency-font-ready .currency-fallback{display:none;}
 html.currency-font-ready .currency-icon{display:inline;}
@@ -96,7 +96,7 @@ h1.brand{font-size:clamp(26px,7vw,46px);margin:0;line-height:1;color:var(--ink);
 .seal .currency-icon{
   font-size:1.65em;
   vertical-align:-0.1em;
-  -webkit-text-stroke:0.55px #FFFFFF;
+  -webkit-text-stroke:0.3px #FFFFFF;
 }
 .card .info{flex:1;min-width:0;}
 .card h3{margin:0;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}

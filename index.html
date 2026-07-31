@@ -14,14 +14,21 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   // يظهر رمز العملة فقط بعد التأكد من نجاح تحميل الخط فعليًا،
-  // وبعدها يتم التبديل تلقائيًا بين الرمز والنص "د.ع" كل ثانية
+  // وبعدها يظهر النص "د.ع" لمدة 5 ثوانٍ ثم الرمز لمدة ثانية واحدة، ويتكرر ذلك تلقائيًا
   if ("fonts" in document) {
     document.fonts.load('16px "GoldDinarCurrency"').then(function (loaded) {
       if (loaded && loaded.length > 0) {
         document.documentElement.classList.add("currency-font-ready");
-        setInterval(function () {
-          document.documentElement.classList.toggle("currency-show-text");
-        }, 1000);
+        document.documentElement.classList.add("currency-show-text"); // يبدأ بعرض النص
+        (function cycle(){
+          setTimeout(function () {
+            document.documentElement.classList.remove("currency-show-text"); // إظهار الرمز
+            setTimeout(function () {
+              document.documentElement.classList.add("currency-show-text"); // إظهار النص
+              cycle();
+            }, 1000);
+          }, 5000);
+        })();
       }
     }).catch(function () { /* يبقى النص الاحتياطي د.ع كما هو، بدون أي تبديل */ });
   }

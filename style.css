@@ -21,9 +21,10 @@
 .currency-icon{
   display:none;
   font-family:"GoldDinarCurrency";
-  font-size:1.2em;
-  vertical-align:-0.08em;
+  font-size:1.3em;
+  vertical-align:-0.09em;
   letter-spacing:0;
+  -webkit-text-stroke:0.3px currentColor;
 }
 html.currency-font-ready .currency-fallback{display:none;}
 html.currency-font-ready .currency-icon{display:inline;}

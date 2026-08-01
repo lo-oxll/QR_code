@@ -1095,6 +1095,7 @@ function renderAdminLogin(){
         document.getElementById("loginErr").textContent = "";
         state.view = "admin";
         state.adminTab = data[0].role === "owner" ? "products" : "orders";
+        await loadOrders();
         render();
       } else {
         document.getElementById("loginErr").textContent = "اسم المستخدم أو كلمة المرور غير صحيحة";
@@ -1143,7 +1144,14 @@ function renderAdmin(){
     render();
   };
   app.querySelectorAll("[data-tab]").forEach(btn=>{
-    btn.onclick = () => { state.adminTab = btn.dataset.tab; render(); };
+    btn.onclick = async () => {
+      state.adminTab = btn.dataset.tab;
+      render();
+      if (state.adminTab === "orders") {
+        await loadOrders();
+        render();
+      }
+    };
   });
 
   // حماية إضافية: منع الوصول لأي تبويب غير مصرح به حتى لو تم التلاعب بالحالة محليًا
@@ -1385,7 +1393,7 @@ function renderProductsTab(body){
     }
 
     showToast("تمت إضافة المنتج بنجاح");
-    await loadAll();
+    await loadProducts();
     renderAdmin();
   };
 
@@ -1435,7 +1443,7 @@ function renderProductsTab(body){
         }
 
         showToast("تم حذف المنتج");
-        await loadAll();
+        await loadProducts();
         renderAdmin();
       };
     });
@@ -1957,7 +1965,7 @@ async function renderAdminsTab(body){
 }
 
 /* ======================= جلب البيانات من Supabase ======================= */
-async function loadAll(){
+async function loadProducts(){
   try {
     const { data: dbProducts, error: prodErr } = await supabaseClient
       .from('products')
@@ -1969,7 +1977,14 @@ async function loadAll(){
     } else {
       state.products = loadLocal(KEYS.PRODUCTS, []);
     }
+  } catch (e) {
+    console.error("Supabase products load error, falling back to local:", e);
+    state.products = loadLocal(KEYS.PRODUCTS, []);
+  }
+}
 
+async function loadOrders(){
+  try {
     const { data: dbOrders, error: ordErr } = await supabaseClient
       .from('orders')
       .select('*')
@@ -1981,8 +1996,7 @@ async function loadAll(){
       state.orders = loadLocal(KEYS.ORDERS, []);
     }
   } catch (e) {
-    console.error("Supabase load error, falling back to local:", e);
-    state.products = loadLocal(KEYS.PRODUCTS, []);
+    console.error("Supabase orders load error, falling back to local:", e);
     state.orders = loadLocal(KEYS.ORDERS, []);
   }
 }
@@ -1990,8 +2004,8 @@ async function loadAll(){
 /* ======================= بدء التشغيل ======================= */
 async function init(){
   initTheme();
-  await loadAll();
-  await loadSettings();
+  // المتجر لا يحتاج جدول الطلبات إطلاقًا — يُجلب فقط عند دخول لوحة الإدارة، لتسريع تحميل المتجر للزبون
+  await Promise.all([loadProducts(), loadSettings()]);
 
   loadingEl.style.display = "none";
   app.style.display = "block";

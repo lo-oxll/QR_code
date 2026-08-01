@@ -2,7 +2,14 @@
 const SUPABASE_URL = "https://hhknbkyjalsbanoudoos.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_SaukFLYePA4O6j9hm33Xfw_uvyYm1u-";
 
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabaseClient;
+try {
+  if (typeof window.supabase === "undefined") throw new Error("Supabase SDK لم يُحمَّل");
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch (e) {
+  console.error("Supabase client init error:", e);
+  if (typeof showStoreLoadError === "function") showStoreLoadError();
+}
 
 const KEYS = { PRODUCTS: "qissa:products", ORDERS: "qissa:orders", SETTINGS: "qissa:settings" };
 const DEFAULT_PW_HASH = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4";
@@ -2003,13 +2010,19 @@ async function loadOrders(){
 
 /* ======================= بدء التشغيل ======================= */
 async function init(){
-  initTheme();
-  // المتجر لا يحتاج جدول الطلبات إطلاقًا — يُجلب فقط عند دخول لوحة الإدارة، لتسريع تحميل المتجر للزبون
-  await Promise.all([loadProducts(), loadSettings()]);
+  try {
+    if (!supabaseClient) throw new Error("Supabase client not initialized");
+    initTheme();
+    // المتجر لا يحتاج جدول الطلبات إطلاقًا — يُجلب فقط عند دخول لوحة الإدارة، لتسريع تحميل المتجر للزبون
+    await Promise.all([loadProducts(), loadSettings()]);
 
-  loadingEl.style.display = "none";
-  app.style.display = "block";
-  render();
+    loadingEl.style.display = "none";
+    app.style.display = "block";
+    render();
+  } catch (e) {
+    console.error("App init error:", e);
+    if (typeof showStoreLoadError === "function") showStoreLoadError();
+  }
 }
 
 init();

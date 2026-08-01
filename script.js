@@ -589,7 +589,26 @@ function openBookingModal(){
         <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(total)} د.ع</span></div>
         <button class="primary-btn" id="submitOrder">تأكيد الحجز</button>
       </div>
-    
+    `;
+    document.getElementById("closeModal").onclick = closeModal;
+    modalBg.onclick = (e) => { if (e.target === modalBg) closeModal(); };
+    document.getElementById("qtyMinus").onclick = () => { qty = Math.max(1, qty-1); paint(); };
+    document.getElementById("qtyPlus").onclick = () => { qty = Math.min(10, qty+1); paint(); };
+    document.getElementById("submitOrder").onclick = submit;
+    // حفظ القيم فور كتابتها حتى تبقى محفوظة عبر أي إعادة رسم لاحقة (تغيير الكمية مثلًا)
+    document.getElementById("fName").oninput = (e) => vals.name = e.target.value;
+    document.getElementById("fLoc").oninput = (e) => vals.loc = e.target.value;
+    document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
+    document.getElementById("fInsta").oninput = (e) => vals.instagram = e.target.value;
+    renderStreetChips();
+
+    const designLabel = document.getElementById("designLabel");
+    if (designLabel) {
+      designLabel.onclick = () => document.getElementById("fDesign").click();
+    }
+    document.getElementById("fDesign").onchange = async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
       try {
         vals.designImage = await resizeImage(f, 900, 0.8);
       } catch (err) {
@@ -747,7 +766,7 @@ function openBookingModal(){
     if (error) {
       console.error("Database insert error:", error);
       if (waWindow) waWindow.close();
-
+      showToast("تعذر حفظ الحجز: " + (error.message || "خطأ غير معروف"), "err");
       btn.disabled = false; btn.textContent = "تأكيد الحجز";
       return;
     }
@@ -800,7 +819,7 @@ function openBookingModal(){
       // ويجب على الزبون إرسال رسالة الواتساب المفتوحة وانتظار رد المتجر لتأكيد الطلب
       modalBg.querySelector(".modal").innerHTML = `
         <div class="center" style="padding:6px 0;">
-
+          <div class="seal" style="margin:0 auto 16px;">✓</div>
           <h2 style="margin-bottom:8px;">تم إرسال حجزك</h2>
           <p class="hint" style="margin-bottom:22px;">فتحنا لك محادثة واتساب برسالة تحتوي كل تفاصيل طلبك — أرسلها الآن، وانتظر رد المتجر لتأكيد الحجز.</p>
           <button class="primary-btn" id="closeWaitBtn">تم</button>

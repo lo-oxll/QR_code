@@ -12,25 +12,6 @@
   --silver:#C7CCD3; --silver-dark:#9AA1AB;
   --btn-border:#FFFFFF; /* إطار أبيض بارز على الأزرار في الوضع الليلي */
 }
-@font-face{
-  font-family:"GoldDinarCurrency";
-  src:url("data:font/woff;base64,d09GRgABAAAAAANsAAoAAAAABFwAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAABPUy8yAAABZAAAAC4AAABgRQE872NtYXAAAAGgAAAAMQAAADzR8RedZ2x5ZgAAAdwAAAC3AAAAuly0hY9oZWFkAAAA9AAAADYAAAA2Lvh+CmhoZWEAAAEsAAAAHgAAACQGCgJ0aG10eAAAAZQAAAAMAAAADAb4AChsb2NhAAAB1AAAAAgAAAAIAA0Aam1heHAAAAFMAAAAFgAAACAABwA/bmFtZQAAApQAAADIAAABng6kpK1wb3N0AAADXAAAABAAAAAoAAgAvQABAAAAAQAAKNSWjV8PPPUAAQPoAAAAAOaSHSsAAAAA5pIdQwAAAAACwAK8AAAAAwACAAAAAAAAeJxjYGRgYFb4bwEkBRgYGDSYXjAARVAAMwA/WwKFAAB4nGNgZGBgYGawBWIQYGJAAwAG7ABHAAB4nGNgZgpmnMDAysDCQBgwCiBx7IEASCm8ZGBW+G/BACQZTqCpV2BgAADSoAVuAAAB9AAAAfQAAAMQACh4nGNgYGBiYGBgBmIRIMkIplkYNIA0G5BmBMoqvGT4/x/IB9P/H4ozgVUBAQCXCAhzAAAAAAAADQANAF14nGNgZDBiYGA8xLSHgZmBwVhRUNGIccK/AiAXxGdgYDoAZMozKDPYMDAICyqLGouCsLEpENuzmuqzKgsqCwoaiyuby7Pzs6ubmyqbG5sqO4FAj393gLuxuiQfr7SaW6h+t78fo/9tWRlxUUFudmYmdh4hYQlZGUY9PUZdPaY9/xnixOJevXolo2tibePq6uZk5ajL95+BkeHfIrEHfMKiknIycnKKCgpy4uLCvMGMQMUMAABdJAwAeJyNjL8KgnAQxz+mFVEELVHQIO1KZEN7QVNLg7RKiQii8AuDeoKeoOfpmXqCTruphrrh+Hz/3AE97lhUYzGodzUN2qLebDNhpOwwZqHcpMtWuVV3bCynI86UvXKDPldlmyU3ZYc5D+UmQ57KraqzKbLjOs0jsyqNifPDZRcnZRaZL9/TwDsHX5mrWRibU1rkbuDP2FCQcWRNSk6EYUUp2xCLPnBhJ5SIl9Xp7773ceFxJvjjzv24C0UZTtIvpOHKD5/ZCzneScV4nGNgYsAPmMF4LwABUQDG") format("woff");
-  font-weight:normal;font-style:normal;font-display:swap;
-}
-.currency-fallback{}
-.currency-icon{
-  display:none;
-  font-family:"GoldDinarCurrency";
-  font-size:1.45em;
-  vertical-align:-0.1em;
-  letter-spacing:0;
-  -webkit-text-stroke:0.15px currentColor;
-}
-html.currency-font-ready .currency-fallback{display:none;}
-html.currency-font-ready .currency-icon{display:inline;}
-html.currency-font-ready.currency-show-text .currency-fallback{display:inline;}
-html.currency-font-ready.currency-show-text .currency-icon{display:none;}
-
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Cairo',sans-serif;-webkit-font-smoothing:antialiased;transition:background .25s ease, color .25s ease;}
 .display{font-family:'Poppins','Cairo',sans-serif;font-weight:800;letter-spacing:.03em;}
@@ -93,11 +74,6 @@ h1.brand{font-size:clamp(26px,7vw,46px);margin:0;line-height:1;color:var(--ink);
   border:2px dashed var(--silver);font-size:14px;font-weight:700;text-align:center;
   padding:2px;line-height:1.2;
 }
-.seal .currency-icon{
-  font-size:1.65em;
-  vertical-align:-0.1em;
-  -webkit-text-stroke:0.3px #FFFFFF;
-}
 .card .info{flex:1;min-width:0;}
 .card h3{margin:0;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .card p{margin:2px 0 0;font-size:12px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.5;max-height:3em;}
@@ -130,6 +106,30 @@ h1.brand{font-size:clamp(26px,7vw,46px);margin:0;line-height:1;color:var(--ink);
   transition:background .25s;border-radius:12px;-webkit-appearance:none;appearance:none;
 }
 .book-btn:hover{background:var(--moss);}
+.view3d-btn{
+  display:block;width:100%;border:2px solid var(--btn-border);padding:11px;font-weight:700;font-size:13px;
+  background:transparent;color:var(--ink);cursor:pointer;letter-spacing:.02em;font-family:'Cairo',sans-serif;
+  transition:background .25s,color .25s;border-radius:12px;-webkit-appearance:none;appearance:none;margin-top:8px;
+}
+.view3d-btn:hover{background:var(--onyx);color:#FFFFFF;}
+.model3d-badge{
+  position:absolute;top:8px;inset-inline-start:8px;background:rgba(14,17,22,.72);color:#fff;
+  font-size:10px;font-weight:700;padding:4px 9px;border-radius:999px;pointer-events:none;
+  backdrop-filter:blur(2px);
+}
+.viewer-modal{max-width:480px;padding:16px;}
+.viewer-canvas-wrap{
+  position:relative;width:100%;aspect-ratio:1;border-radius:16px;overflow:hidden;
+  background:var(--card);border:1px solid var(--line);touch-action:none;
+}
+.viewer-canvas-wrap canvas{display:block;width:100%;height:100%;}
+.viewer-loading{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;color:var(--muted);font-size:13px;background:var(--card);
+}
+.viewer-loading .spinner{width:30px;height:30px;border-width:3px;}
+.viewer-hint{text-align:center;color:var(--muted);font-size:12px;margin-top:10px;}
+
 .fab{
   position:fixed;bottom:20px;left:20px;width:44px;height:44px;border-radius:50%;
   background:var(--onyx);color:#FFFFFF;display:flex;align-items:center;justify-content:center;

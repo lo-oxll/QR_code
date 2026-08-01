@@ -12,27 +12,9 @@
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-  // يظهر رمز العملة فقط بعد التأكد من نجاح تحميل الخط فعليًا،
-  // وبعدها يظهر النص "د.ع" لمدة 5 ثوانٍ ثم الرمز لمدة ثانية واحدة، ويتكرر ذلك تلقائيًا
-  if ("fonts" in document) {
-    document.fonts.load('16px "GoldDinarCurrency"').then(function (loaded) {
-      if (loaded && loaded.length > 0) {
-        document.documentElement.classList.add("currency-font-ready");
-        document.documentElement.classList.add("currency-show-text"); // يبدأ بعرض النص
-        (function cycle(){
-          setTimeout(function () {
-            document.documentElement.classList.remove("currency-show-text"); // إظهار الرمز
-            setTimeout(function () {
-              document.documentElement.classList.add("currency-show-text"); // إظهار النص
-              cycle();
-            }, 1000);
-          }, 5000);
-        })();
-      }
-    }).catch(function () { /* يبقى النص الاحتياطي د.ع كما هو، بدون أي تبديل */ });
-  }
-</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 

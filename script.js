@@ -321,6 +321,39 @@ function resizeImage(file, maxW=720, quality=0.72){
   });
 }
 
+// نفس تصغير الصورة، لكن يرجع Blob (بدل نص base64) تمهيدًا لرفعه إلى Supabase Storage
+function resizeImageToBlob(file, maxW=720, quality=0.72){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxW/img.width);
+        const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+        const canvas = document.createElement("canvas");
+        canvas.width=w; canvas.height=h;
+        canvas.getContext("2d").drawImage(img,0,0,w,h);
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("toBlob failed")), "image/jpeg", quality);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// يرفع صورة (Blob) إلى Supabase Storage (bucket: products) ويرجع الرابط العام المباشر
+async function uploadImageToStorage(blob, folder="misc"){
+  const path = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
+  const { error } = await supabaseClient.storage
+    .from("products")
+    .upload(path, blob, { contentType: "image/jpeg", upsert: false });
+  if (error) throw error;
+  const { data } = supabaseClient.storage.from("products").getPublicUrl(path);
+  return data.publicUrl;
+}
+
 /* ======================= الرندر الرئيسي ======================= */
 function render(){
   if (state.view === "store") return renderStore();
@@ -1259,8 +1292,14 @@ function renderProductsTab(body){
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     for (const f of files) {
-      const dataUrl = await resizeImage(f, 560, 0.7);
-      colorDraftImages.push(dataUrl);
+      try {
+        const blob = await resizeImageToBlob(f, 560, 0.7);
+        const url = await uploadImageToStorage(blob, "colors");
+        colorDraftImages.push(url);
+      } catch (err) {
+        console.error("color image upload error", err);
+        showToast("تعذر رفع إحدى صور اللون", "err");
+      }
     }
     paintColorDraftThumbs();
     cFiles.value = "";
@@ -1362,9 +1401,18 @@ function renderProductsTab(body){
   document.getElementById("fileInput").onchange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const dataUrl = await resizeImage(file);
-    pendingImage = dataUrl;
+    // معاينة فورية أثناء الرفع (رابط مؤقت محليًا بالمتصفح، يُستبدل بالرابط النهائي بعد الرفع)
+    pendingImage = URL.createObjectURL(file);
     pendingPos = { x: 50, y: 50 };
+    paintUploadBox();
+    try {
+      const blob = await resizeImageToBlob(file);
+      pendingImage = await uploadImageToStorage(blob, "products");
+    } catch (err) {
+      console.error("product image upload error", err);
+      showToast("تعذر رفع الصورة، تحقق من إعداد Storage bucket \"products\"", "err");
+      pendingImage = null;
+    }
     paintUploadBox();
   };
   document.getElementById("pPrice").oninput = (e) => {

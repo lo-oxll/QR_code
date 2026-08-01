@@ -390,6 +390,7 @@ function renderStore(){
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16.5 2h-3v13.5a3 3 0 1 1-2.5-2.96V9.4A6.5 6.5 0 1 0 16.5 15.8V8.2a7.4 7.4 0 0 0 4.5 1.5V6.6a4.3 4.3 0 0 1-4.5-4.6z"/></svg>
           </a>
         </div>
+        <button class="ghost-btn" id="customOrderBtn" style="margin:16px auto 0;max-width:280px;">🎨 اطلب تصميمك الخاص</button>
       </header>
       ${state.products.length === 0 ? `<div class="empty">لم تتم إضافة أي منتجات بعد.</div>` : `<div class="grid">${items}</div>`}
     </div>
@@ -508,6 +509,9 @@ function renderStore(){
   document.getElementById("adminFab").addEventListener("click", () => {
     state.view = "adminLogin";
     render();
+  });
+  document.getElementById("customOrderBtn").addEventListener("click", () => {
+    openCustomOrderModal();
   });
 }
 
@@ -826,6 +830,242 @@ function openBookingModal(){
     }
     if (waWindow) waWindow.close(); // لا يوجد رقم واتساب مُعرَّف أصلًا في الإعدادات، أغلق النافذة الفارغة
     showToast("تم إرسال الحجز بنجاح، سيتم التواصل معك قريبًا");
+    closeModal();
+    render();
+  }
+
+  paint();
+  modalBg.classList.add("open");
+}
+
+/* ======================= نافذة الطلب المخصص (بدون منتج محدد من الكتالوج) ======================= */
+function openCustomOrderModal(){
+  let cities = [];
+  let regions = [];
+  let citiesFailed = false;
+  const vals = { name: "", loc: "", phone: "", instagram: "", cityId: "", cityName: "", regionId: "", regionName: "", designImage: null, serviceType: "طباعة", desc: "" };
+  const SERVICE_TYPES = ["طباعة", "تطريز", "سجاد Tufting", "باجات / أقلام", "أخرى"];
+
+  function paint(){
+    const cityOptions = cities.map(c => `<option value="${esc(c.id)}" ${String(c.id)===String(vals.cityId) ? "selected" : ""}>${esc(c.city_name)}</option>`).join("");
+    modalBg.innerHTML = `
+      <div class="modal">
+        <div class="row">
+          <h2>اطلب تصميمك الخاص</h2>
+          <button class="close-x" id="closeModal">✕</button>
+        </div>
+        <p class="hint" style="margin:-6px 0 14px;">اشرح لنا فكرتك، أرفق تصميمك أو صورة مرجعية إن وُجدت، وسنتواصل معك لتحديد السعر وتفاصيل التنفيذ.</p>
+
+        <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">نوع الخدمة</p>
+        <div class="size-row" id="serviceTypeRow" style="margin-bottom:14px;">
+          ${SERVICE_TYPES.map(t => `<button type="button" class="size-chip ${vals.serviceType===t?'active':''}" data-svc="${esc(t)}">${esc(t)}</button>`).join("")}
+        </div>
+
+        <textarea class="plain-textarea" id="fCustomDesc" placeholder="اشرح طلبك (المقاس، الكمية، الألوان، أي تفاصيل مهمة...)" rows="3">${esc(vals.desc)}</textarea>
+        <div class="err" id="errDesc" style="margin:-6px 0 10px;"></div>
+
+        <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">تصميمك أو صورة مرجعية (اختياري)</p>
+        <input type="file" id="fDesign" accept="image/*" style="display:none">
+        ${vals.designImage ? `
+          <div style="position:relative;width:84px;margin-bottom:10px;">
+            <img src="${esc(vals.designImage)}" style="width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--line);display:block;">
+            <button type="button" id="removeDesign" style="position:absolute;top:-6px;left:-6px;width:22px;height:22px;border-radius:50%;background:var(--onyx);color:#fff;border:0;cursor:pointer;font-size:12px;line-height:1;">✕</button>
+          </div>
+        ` : `<label class="ghost-btn" id="designLabel" style="display:block;text-align:center;cursor:pointer;margin-bottom:14px;">🎨 إرفاق صورة</label>`}
+
+        <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
+        ${citiesFailed ? "" : `
+        <div class="field"><div class="box">🏙️<select id="fCity" style="width:100%;background:transparent;border:0;outline:0;font-family:'Cairo',sans-serif;font-size:14px;">
+          <option value="">${cities.length ? "اختر المدينة" : "جارِ التحميل..."}</option>${cityOptions}
+        </select></div><div class="err" id="errCity"></div></div>
+        <div style="position:relative;">
+          <div class="field"><div class="box">🗺️<input id="fRegionSearch" autocomplete="off" value="${esc(vals.regionName)}"
+            placeholder="${!vals.cityId ? "اختر المدينة أولًا" : (regions.length ? "ابحث عن المنطقة" : "جارِ التحميل...")}"
+            ${vals.cityId ? "" : "disabled"}></div><div class="err" id="errRegion"></div></div>
+          <div id="regionSuggest" class="suggest-list" style="display:none;"></div>
+        </div>
+        `}
+        <div class="field"><div class="box">📍<input id="fLoc" placeholder="${citiesFailed ? "الموقع / العنوان" : "أقرب نقطة دالة (تفاصيل إضافية)"}" value="${esc(vals.loc)}"></div><div class="err" id="errLoc"></div></div>
+        <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
+        <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام (اختياري)" value="${esc(vals.instagram)}" dir="ltr"></div></div>
+
+        <button class="primary-btn" id="submitOrder">إرسال الطلب</button>
+      </div>
+    `;
+    document.getElementById("closeModal").onclick = closeModal;
+    modalBg.onclick = (e) => { if (e.target === modalBg) closeModal(); };
+    document.getElementById("submitOrder").onclick = submit;
+
+    document.querySelectorAll("#serviceTypeRow [data-svc]").forEach(chip => {
+      chip.onclick = () => { vals.serviceType = chip.dataset.svc; paint(); };
+    });
+    document.getElementById("fCustomDesc").oninput = (e) => vals.desc = e.target.value;
+    document.getElementById("fName").oninput = (e) => vals.name = e.target.value;
+    document.getElementById("fLoc").oninput = (e) => vals.loc = e.target.value;
+    document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
+    document.getElementById("fInsta").oninput = (e) => vals.instagram = e.target.value;
+
+    const designLabel = document.getElementById("designLabel");
+    if (designLabel) designLabel.onclick = () => document.getElementById("fDesign").click();
+    document.getElementById("fDesign").onchange = async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        vals.designImage = await resizeImage(f, 900, 0.8);
+      } catch (err) {
+        console.error("design image resize error", err);
+        showToast("تعذر تحميل الصورة", "err");
+      }
+      paint();
+    };
+    const removeDesignBtn = document.getElementById("removeDesign");
+    if (removeDesignBtn) removeDesignBtn.onclick = () => { vals.designImage = null; paint(); };
+
+    if (!citiesFailed) {
+      document.getElementById("fCity").onchange = async (e) => {
+        vals.cityId = e.target.value;
+        vals.cityName = cities.find(c => String(c.id) === String(vals.cityId))?.city_name || "";
+        vals.regionId = ""; vals.regionName = "";
+        regions = [];
+        paint();
+        if (!vals.cityId) return;
+        try {
+          regions = await getAlwaseetRegions(vals.cityId);
+        } catch (err) {
+          console.error("regions load error", err);
+        }
+        paint();
+      };
+
+      const regionInput = document.getElementById("fRegionSearch");
+      const suggestEl = document.getElementById("regionSuggest");
+      function showRegionSuggestions(query){
+        const q = (query || "").trim();
+        const matches = q ? regions.filter(r => r.region_name.includes(q)) : regions;
+        if (!matches.length) { suggestEl.style.display = "none"; suggestEl.innerHTML = ""; return; }
+        suggestEl.innerHTML = matches.slice(0, 40).map(r =>
+          `<button type="button" data-rid="${esc(r.id)}" data-rname="${esc(r.region_name)}">${esc(r.region_name)}</button>`
+        ).join("");
+        suggestEl.style.display = "block";
+        suggestEl.querySelectorAll("[data-rid]").forEach(btn => {
+          btn.onmousedown = (ev) => {
+            ev.preventDefault();
+            vals.regionId = btn.dataset.rid;
+            vals.regionName = btn.dataset.rname;
+            regionInput.value = vals.regionName;
+            suggestEl.style.display = "none";
+          };
+        });
+      }
+      regionInput.oninput = (e) => {
+        vals.regionId = "";
+        vals.regionName = e.target.value;
+        showRegionSuggestions(e.target.value);
+      };
+      regionInput.onfocus = () => showRegionSuggestions(regionInput.value);
+      regionInput.addEventListener("blur", () => setTimeout(() => { suggestEl.style.display = "none"; }, 150));
+    }
+  }
+
+  (async function loadCities(){
+    try {
+      cities = await getAlwaseetCities();
+      paint();
+    } catch (err) {
+      console.error("alwaseet cities load error", err);
+      citiesFailed = true;
+      paint();
+    }
+  })();
+
+  async function submit(){
+    const name = vals.name.trim();
+    const loc = vals.loc.trim();
+    const phone = vals.phone.trim();
+    const instagram = vals.instagram.trim().replace(/^@/, "");
+    const desc = vals.desc.trim();
+    const cityId = citiesFailed ? "" : vals.cityId;
+    const regionId = citiesFailed ? "" : vals.regionId;
+    let ok = true;
+    document.getElementById("errName").textContent = "";
+    document.getElementById("errLoc").textContent = "";
+    document.getElementById("errPhone").textContent = "";
+    document.getElementById("errDesc").textContent = "";
+    if (!citiesFailed) {
+      document.getElementById("errCity").textContent = "";
+      document.getElementById("errRegion").textContent = "";
+    }
+    if (!desc){ document.getElementById("errDesc").textContent = "اشرح لنا طلبك بإيجاز"; ok = false; }
+    if (!name){ document.getElementById("errName").textContent = "أدخل الاسم"; ok = false; }
+    if (!loc){ document.getElementById("errLoc").textContent = "أدخل الموقع"; ok = false; }
+    if (!phone || phone.replace(/\D/g,"").length < 8){ document.getElementById("errPhone").textContent = "أدخل رقم هاتف صحيح"; ok = false; }
+    if (!citiesFailed && !cityId){ document.getElementById("errCity").textContent = "اختر المدينة"; ok = false; }
+    if (!citiesFailed && !regionId){ document.getElementById("errRegion").textContent = "اختر المنطقة"; ok = false; }
+    if (!ok) return;
+
+    const btn = document.getElementById("submitOrder");
+    btn.disabled = true; btn.textContent = "جارِ الإرسال...";
+
+    const waWindow = window.open("", "_blank");
+    const cityName = vals.cityName;
+    const regionName = vals.regionName;
+
+    const { data: inserted, error } = await supabaseClient
+      .from('orders')
+      .insert([
+        {
+          customer_name: name,
+          phone_number: phone,
+          address: loc,
+          product_name: `طلب مخصص - ${vals.serviceType}`,
+          city_id: cityId || null,
+          region_id: regionId || null,
+          city_name: cityName || null,
+          region_name: regionName || null,
+          instagram_username: instagram || null,
+          qty: 1,
+          total: null,
+          alwaseet_status: 'pending',
+          design_image: vals.designImage || null,
+          custom_request: desc
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Database insert error:", error);
+      if (waWindow) waWindow.close();
+      showToast("تعذر إرسال الطلب: " + (error.message || "خطأ غير معروف"), "err");
+      btn.disabled = false; btn.textContent = "إرسال الطلب";
+      return;
+    }
+
+    const localOrder = { ...inserted };
+    state.orders.unshift(localOrder);
+
+    // الطلبات المخصصة لا تُرسل تلقائيًا لشركة الوسيط لأن السعر غير محدد بعد —
+    // يحدَّد السعر أولًا عبر التواصل، وبعدها يرسلها المشرف يدويًا من لوحة الإدارة
+    const num = formatWhatsapp(state.settings.whatsapp);
+    if (num){
+      const msg = `طلب مخصص جديد من QR CODE\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}${vals.designImage ? "\n🎨 تم إرفاق تصميم/صورة مرجعية — راجع لوحة الإدارة لعرضها" : ""}`;
+      const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+      if (waWindow) { waWindow.location.href = waUrl; }
+      else { window.open(waUrl, "_blank"); }
+
+      modalBg.querySelector(".modal").innerHTML = `
+        <div class="center" style="padding:6px 0;">
+          <div class="seal" style="margin:0 auto 16px;">✓</div>
+          <h2 style="margin-bottom:8px;">تم إرسال طلبك</h2>
+          <p class="hint" style="margin-bottom:22px;">فتحنا لك محادثة واتساب بتفاصيل طلبك — أرسلها الآن، وسنتواصل معك لتحديد السعر وتأكيد التنفيذ.</p>
+          <button class="primary-btn" id="closeWaitBtn">تم</button>
+        </div>
+      `;
+      document.getElementById("closeWaitBtn").onclick = () => { closeModal(); render(); };
+      return;
+    }
+    if (waWindow) waWindow.close();
+    showToast("تم إرسال طلبك بنجاح، سيتم التواصل معك قريبًا");
     closeModal();
     render();
   }
@@ -1290,6 +1530,7 @@ function renderOrdersTab(body){
             <div>📍 ${esc(o.address || o.location)}${o.city_name ? ` — ${esc(o.city_name)}${o.region_name ? " / " + esc(o.region_name) : ""}` : ""}</div>
             <div>📞 <a href="https://wa.me/${formatWhatsapp(o.phone_number || o.phone)}" target="_blank" style="color:var(--ink);text-decoration:underline;">${esc(o.phone_number || o.phone)}</a></div>
             ${o.instagram_username ? `<div>📷 <a href="https://instagram.com/${esc(o.instagram_username)}" target="_blank" style="color:var(--moss);text-decoration:underline;">@${esc(o.instagram_username)}</a></div>` : ""}
+            ${o.custom_request ? `<div style="margin-top:6px;background:var(--card);padding:8px;border-radius:8px;">📝 ${esc(o.custom_request)}</div>` : ""}
             ${o.design_image ? `<div style="margin-top:6px;">🎨 <a href="${esc(o.design_image)}" target="_blank" style="color:var(--moss);text-decoration:underline;">عرض التصميم المُرفق من الزبون</a></div>` : ""}
             <div style="margin-top:6px;">${alwaseetStatusText(o)}</div>
           </div>

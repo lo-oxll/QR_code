@@ -365,7 +365,6 @@ function renderStore(){
           </div>
         </div>
         <button class="book-btn" data-book="${esc(p.id)}">احجز الآن</button>
-        ${p.model3d ? `<button class="view3d-btn" data-view3d="${esc(p.id)}">🧊 عرض 3D · تقليب من كل الجهات</button>` : ""}
       </div>
     `;
   }).join("");
@@ -506,148 +505,10 @@ function renderStore(){
       openBookingModal();
     });
   });
-  app.querySelectorAll("[data-view3d]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const pid = btn.dataset.view3d;
-      const p = state.products.find(x => String(x.id) === pid);
-      if (p?.model3d) open3DViewer(p.model3d, p.name);
-    });
-  });
   document.getElementById("adminFab").addEventListener("click", () => {
     state.view = "adminLogin";
     render();
   });
-}
-
-/* ======================= عارض المجسم ثلاثي الأبعاد (3D) ======================= */
-// يفتح نافذة منبثقة تعرض ملف GLB/GLTF مع تدوير تلقائي بطيء يتيح رؤية المنتج من جميع الجهات،
-// ويمكن للزبون أيضًا السحب بإصبعه/فأرته لتقليب المجسم يدويًا لأي زاوية يريدها.
-let viewer3dState = null;
-
-function stop3DViewer(){
-  if (!viewer3dState) return;
-  cancelAnimationFrame(viewer3dState.rafId);
-  window.removeEventListener("resize", viewer3dState.onResize);
-  viewer3dState.controls?.dispose();
-  viewer3dState.renderer?.dispose();
-  viewer3dState.scene?.traverse(obj => {
-    if (obj.geometry) obj.geometry.dispose();
-    if (obj.material) {
-      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-      mats.forEach(m => {
-        Object.values(m).forEach(v => { if (v && v.isTexture) v.dispose(); });
-        m.dispose();
-      });
-    }
-  });
-  viewer3dState = null;
-}
-
-function open3DViewer(url, name){
-  if (typeof THREE === "undefined" || !THREE.GLTFLoader || !THREE.FBXLoader) {
-    showToast("تعذر تحميل عارض 3D، تحقق من الاتصال بالإنترنت", "err");
-    return;
-  }
-
-  modalBg.innerHTML = `
-    <div class="modal viewer-modal">
-      <div class="row">
-        <h2>${esc(name || "عرض 3D")}</h2>
-        <button class="close-x" id="closeViewer3d">✕</button>
-      </div>
-      <div class="viewer-canvas-wrap" id="viewerCanvasWrap">
-        <div class="viewer-loading" id="viewerLoading">
-          <div class="spinner"></div>
-          <span>جارِ تحميل المجسم...</span>
-        </div>
-      </div>
-      <p class="viewer-hint">يدور المجسم تلقائيًا ببطء — يمكنك أيضًا سحبه بإصبعك أو فأرتك لتقليبه من أي جهة</p>
-    </div>
-  `;
-  modalBg.classList.add("open");
-  modalBg.onclick = (e) => { if (e.target === modalBg) closeModal(); };
-  document.getElementById("closeViewer3d").onclick = () => closeModal();
-
-  const wrap = document.getElementById("viewerCanvasWrap");
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(40, wrap.clientWidth / wrap.clientHeight, 0.01, 1000);
-  camera.position.set(0, 0, 3);
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
-  wrap.appendChild(renderer.domElement);
-
-  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
-  dirLight.position.set(3, 5, 4);
-  scene.add(dirLight);
-  const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
-  dirLight2.position.set(-4, -2, -3);
-  scene.add(dirLight2);
-
-  const controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.06;
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.8; // دوران تلقائي بطيء (دورة كاملة كل ~75 ثانية تقريبًا)
-  controls.enablePan = false;
-  controls.minDistance = 0.5;
-  controls.maxDistance = 10;
-
-  viewer3dState = { scene, camera, renderer, controls, rafId: null, onResize: null };
-
-  const isFbx = /\.fbx($|\?)/i.test(url);
-  const loader = isFbx ? new THREE.FBXLoader() : new THREE.GLTFLoader();
-
-  function placeModel(model){
-    // توسيط المجسم وتحجيمه تلقائيًا ليملأ إطار العرض بشكل مناسب مهما كان حجمه الأصلي
-    const box = new THREE.Box3().setFromObject(model);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z) || 1;
-    const scale = 1.6 / maxDim;
-    model.scale.setScalar(scale);
-    model.position.sub(center.multiplyScalar(scale));
-    scene.add(model);
-    const loadingEl = document.getElementById("viewerLoading");
-    if (loadingEl) loadingEl.remove();
-  }
-
-  loader.load(
-    url,
-    (result) => placeModel(isFbx ? result : result.scene),
-    (progress) => {
-      const loadingEl = document.getElementById("viewerLoading");
-      if (loadingEl && progress.total) {
-        const pct = Math.round((progress.loaded / progress.total) * 100);
-        const span = loadingEl.querySelector("span");
-        if (span) span.textContent = `جارِ تحميل المجسم... ${pct}%`;
-      }
-    },
-    (err) => {
-      console.error("3D model load error:", err);
-      const loadingEl = document.getElementById("viewerLoading");
-      if (loadingEl) loadingEl.innerHTML = `<span style="color:var(--err);">تعذر تحميل المجسم ثلاثي الأبعاد</span>`;
-    }
-  );
-
-  function onResize(){
-    if (!wrap.clientWidth || !wrap.clientHeight) return;
-    camera.aspect = wrap.clientWidth / wrap.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(wrap.clientWidth, wrap.clientHeight);
-  }
-  viewer3dState.onResize = onResize;
-  window.addEventListener("resize", onResize);
-
-  function animate(){
-    viewer3dState.rafId = requestAnimationFrame(animate);
-    controls.update();
-    renderer.render(scene, camera);
-  }
-  animate();
 }
 
 /* ---------- نافذة الحجز ---------- */
@@ -944,7 +805,6 @@ function openBookingModal(){
 function closeModal(){
   modalBg.classList.remove("open");
   modalBg.innerHTML = "";
-  stop3DViewer();
 }
 
 /* ---------- تسجيل دخول الأدمن (يوزر + رمز، عبر Supabase) ---------- */
@@ -1118,10 +978,6 @@ function renderProductsTab(body){
       </div>
       <div id="pendingColorsList" class="color-thumbs" style="margin-bottom:16px;"></div>
 
-      <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">مجسم 3D (اختياري)</p>
-      <input class="plain-input" id="pModel3d" placeholder="رابط ملف النموذج ثلاثي الأبعاد (GLB/GLTF)">
-      <p class="hint" style="margin:2px 0 16px;">إذا أضفت رابطًا، سيظهر زر "عرض 3D" على بطاقة المنتج يتيح للزبون تقليب المنتج من جميع الجهات بدوران تلقائي بطيء.</p>
-
       <button class="primary-btn" id="addBtn">+ إضافة المنتج</button>
     </div>
     <div id="prodList"></div>
@@ -1273,13 +1129,10 @@ function renderProductsTab(body){
     const btn = document.getElementById("addBtn");
     btn.disabled = true; btn.textContent = "جارِ الحفظ...";
 
-    const model3d = document.getElementById("pModel3d").value.trim();
-
     const row = { name, price: Number(price), description: desc, image: pendingImage };
     if (pendingImage) row.image_position = `${pendingPos.x}% ${pendingPos.y}%`;
     if (pendingSizes.size) row.sizes = [...pendingSizes].join(",");
     if (pendingColors.length) row.colors = pendingColors;
-    if (model3d) row.model3d = model3d;
 
     const { error } = await supabaseClient.from('products').insert([row]);
 
@@ -1306,7 +1159,6 @@ function renderProductsTab(body){
       const variantBits = [];
       if (colors.length) variantBits.push(`${colors.length} ألوان`);
       if (sizes.length) variantBits.push(sizes.join("/"));
-      if (p.model3d) variantBits.push("مجسم 3D");
       return `
         <div class="prod-row">
           ${prodImg}

@@ -544,7 +544,7 @@ function stop3DViewer(){
 }
 
 function open3DViewer(url, name){
-  if (typeof THREE === "undefined" || !THREE.GLTFLoader) {
+  if (typeof THREE === "undefined" || !THREE.GLTFLoader || !THREE.FBXLoader) {
     showToast("تعذر تحميل عارض 3D، تحقق من الاتصال بالإنترنت", "err");
     return;
   }
@@ -598,28 +598,36 @@ function open3DViewer(url, name){
 
   viewer3dState = { scene, camera, renderer, controls, rafId: null, onResize: null };
 
-  const loader = new THREE.GLTFLoader();
+  const isFbx = /\.fbx($|\?)/i.test(url);
+  const loader = isFbx ? new THREE.FBXLoader() : new THREE.GLTFLoader();
+
+  function placeModel(model){
+    // توسيط المجسم وتحجيمه تلقائيًا ليملأ إطار العرض بشكل مناسب مهما كان حجمه الأصلي
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    const scale = 1.6 / maxDim;
+    model.scale.setScalar(scale);
+    model.position.sub(center.multiplyScalar(scale));
+    scene.add(model);
+    const loadingEl = document.getElementById("viewerLoading");
+    if (loadingEl) loadingEl.remove();
+  }
+
   loader.load(
     url,
-    (gltf) => {
-      const model = gltf.scene;
-
-      // توسيط المجسم وتحجيمه تلقائيًا ليملأ إطار العرض بشكل مناسب مهما كان حجمه الأصلي
-      const box = new THREE.Box3().setFromObject(model);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
-      const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      const scale = 1.6 / maxDim;
-      model.scale.setScalar(scale);
-      model.position.sub(center.multiplyScalar(scale));
-
-      scene.add(model);
+    (result) => placeModel(isFbx ? result : result.scene),
+    (progress) => {
       const loadingEl = document.getElementById("viewerLoading");
-      if (loadingEl) loadingEl.remove();
+      if (loadingEl && progress.total) {
+        const pct = Math.round((progress.loaded / progress.total) * 100);
+        const span = loadingEl.querySelector("span");
+        if (span) span.textContent = `جارِ تحميل المجسم... ${pct}%`;
+      }
     },
-    undefined,
     (err) => {
-      console.error("GLTF load error:", err);
+      console.error("3D model load error:", err);
       const loadingEl = document.getElementById("viewerLoading");
       if (loadingEl) loadingEl.innerHTML = `<span style="color:var(--err);">تعذر تحميل المجسم ثلاثي الأبعاد</span>`;
     }
@@ -1250,6 +1258,7 @@ function renderProductsTab(body){
   document.getElementById("pPrice").oninput = (e) => {
     e.target.value = e.target.value.replace(/\D/g, "");
   };
+
   document.getElementById("addBtn").onclick = async () => {
     const name = document.getElementById("pName").value.trim();
     const price = document.getElementById("pPrice").value.trim();

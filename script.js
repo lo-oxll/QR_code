@@ -527,7 +527,7 @@ function openBookingModal(){
   let citiesFailed = false;
   // القيم تُحفظ هنا وتُعاد تعبئتها في كل إعادة رسم، لأن paint() يعيد بناء الـ HTML من الصفر
   // في كل مرة (عند تغيير الكمية أو المدينة)، وبدون هذا كانت قيم الحقول تُمسح بالكامل.
-  const vals = { name: "", loc: "", phone: "", instagram: "", cityId: "", cityName: "", regionId: "", regionName: "" };
+  const vals = { name: "", loc: "", phone: "", instagram: "", cityId: "", cityName: "", regionId: "", regionName: "", designImage: null };
 
   function paint(){
     const total = qty * Number(p.price);
@@ -571,6 +571,17 @@ function openBookingModal(){
         ${citiesFailed ? "" : `<div id="streetChips" class="street-chips"></div>`}
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
         <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام" value="${esc(vals.instagram)}" dir="ltr"></div><div class="err" id="errInsta"></div></div>
+
+        <p class="hint" style="margin:6px 0 6px;font-weight:700;color:var(--ink);">ارفع تصميمك أو شعارك (اختياري)</p>
+        <input type="file" id="fDesign" accept="image/*" style="display:none">
+        ${vals.designImage ? `
+          <div style="position:relative;width:84px;margin-bottom:10px;">
+            <img src="${esc(vals.designImage)}" style="width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--line);display:block;">
+            <button type="button" id="removeDesign" style="position:absolute;top:-6px;left:-6px;width:22px;height:22px;border-radius:50%;background:var(--onyx);color:#fff;border:0;cursor:pointer;font-size:12px;line-height:1;">✕</button>
+          </div>
+        ` : `<label class="ghost-btn" id="designLabel" style="display:block;text-align:center;cursor:pointer;margin-bottom:10px;">🎨 إرفاق صورة التصميم/الشعار</label>`}
+        <p class="hint" style="margin:-4px 0 16px;">إذا كان طلبك تصميمًا مخصصًا (تشيرت، باج، إلخ)، أرفق صورة التصميم أو الشعار هنا بدل انتظار التواصل عبر واتساب.</p>
+
         <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(total)} د.ع</span></div>
         <button class="primary-btn" id="submitOrder">تأكيد الحجز</button>
       </div>
@@ -586,6 +597,26 @@ function openBookingModal(){
     document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
     document.getElementById("fInsta").oninput = (e) => vals.instagram = e.target.value;
     renderStreetChips();
+
+    const designLabel = document.getElementById("designLabel");
+    if (designLabel) {
+      designLabel.onclick = () => document.getElementById("fDesign").click();
+    }
+    document.getElementById("fDesign").onchange = async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        vals.designImage = await resizeImage(f, 900, 0.8);
+      } catch (err) {
+        console.error("design image resize error", err);
+        showToast("تعذر تحميل الصورة", "err");
+      }
+      paint();
+    };
+    const removeDesignBtn = document.getElementById("removeDesign");
+    if (removeDesignBtn) {
+      removeDesignBtn.onclick = () => { vals.designImage = null; paint(); };
+    }
 
     if (!citiesFailed) {
       document.getElementById("fCity").onchange = async (e) => {
@@ -721,7 +752,8 @@ function openBookingModal(){
           instagram_username: instagram || null,
           qty,
           total,
-          alwaseet_status: 'pending'
+          alwaseet_status: 'pending',
+          design_image: vals.designImage || null
         }
       ])
       .select()
@@ -774,7 +806,7 @@ function openBookingModal(){
     // وإلا يُستخدم الرقم العام المشترك من الإعدادات كخطة بديلة
     const num = formatWhatsapp(assignedWhatsapp || state.settings.whatsapp);
     if (num){
-      const msg = `حجز جديد من QR CODE\nالمنتج: ${p.name}${variant.colorName ? `\nاللون: ${variant.colorName}` : ""}${variant.size ? `\nالقياس: ${variant.size}` : ""}\nالكمية: ${qty}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
+      const msg = `حجز جديد من QR CODE\nالمنتج: ${p.name}${variant.colorName ? `\nاللون: ${variant.colorName}` : ""}${variant.size ? `\nالقياس: ${variant.size}` : ""}\nالكمية: ${qty}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}${vals.designImage ? "\n🎨 تم إرفاق تصميم مخصص — راجع لوحة الإدارة لعرضه" : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
       if (waWindow) { waWindow.location.href = waUrl; }
       else { window.open(waUrl, "_blank"); } // احتياط لو حظر المتصفح النافذة المفتوحة مسبقًا لأي سبب
@@ -1258,6 +1290,7 @@ function renderOrdersTab(body){
             <div>📍 ${esc(o.address || o.location)}${o.city_name ? ` — ${esc(o.city_name)}${o.region_name ? " / " + esc(o.region_name) : ""}` : ""}</div>
             <div>📞 <a href="https://wa.me/${formatWhatsapp(o.phone_number || o.phone)}" target="_blank" style="color:var(--ink);text-decoration:underline;">${esc(o.phone_number || o.phone)}</a></div>
             ${o.instagram_username ? `<div>📷 <a href="https://instagram.com/${esc(o.instagram_username)}" target="_blank" style="color:var(--moss);text-decoration:underline;">@${esc(o.instagram_username)}</a></div>` : ""}
+            ${o.design_image ? `<div style="margin-top:6px;">🎨 <a href="${esc(o.design_image)}" target="_blank" style="color:var(--moss);text-decoration:underline;">عرض التصميم المُرفق من الزبون</a></div>` : ""}
             <div style="margin-top:6px;">${alwaseetStatusText(o)}</div>
           </div>
           <div class="order-actions">

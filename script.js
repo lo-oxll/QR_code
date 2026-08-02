@@ -2992,10 +2992,13 @@ async function loadOrders(){
     if (!ordErr && dbOrders) {
       state.orders = dbOrders;
     } else {
+      console.error("get_orders_secure error:", ordErr);
+      showToast("تعذر تحديث الطلبات من الخادم: " + (ordErr?.message || "خطأ غير معروف"), "err");
       state.orders = loadLocal(KEYS.ORDERS, []);
     }
   } catch (e) {
     console.error("Supabase orders load error, falling back to local:", e);
+    showToast("تعذر تحديث الطلبات من الخادم: " + (e.message || "خطأ غير معروف"), "err");
     state.orders = loadLocal(KEYS.ORDERS, []);
   }
 }

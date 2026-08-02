@@ -710,12 +710,15 @@ function renderStore(){
 
 function openAboutModal(){
   modalBg.innerHTML = `
-    <div class="modal">
-      <div class="row">
-        <h2>من نحن</h2>
+    <div class="modal modal-lg">
+      <div class="modal-lg-head">
+        <div>
+          <h2>من نحن</h2>
+          <p>تعرّف على قصتنا</p>
+        </div>
         <button class="close-x" id="closeModal">✕</button>
       </div>
-      <p style="white-space:pre-wrap;line-height:1.9;font-size:14px;">${esc(state.settings.aboutUs || "")}</p>
+      <div class="modal-lg-body">${formatRichText(state.settings.aboutUs)}</div>
     </div>
   `;
   document.getElementById("closeModal").onclick = closeModal;
@@ -906,14 +909,53 @@ function openCartModal(){
   modalBg.classList.add("open");
 }
 
+// يحوّل نص عادي (كتبه صاحب المتجر بمربع نص بسيط) إلى عرض منظّم:
+// الأسطر التي تنتهي بـ ":" تصير عنوان قسم فرعي، والأسطر المتتالية التي تبدأ بـ "-"/"•"/"*" تصير قائمة نقطية،
+// وبقية الأسطر تصير فقرات عادية. لا يتطلب من صاحب المتجر تعلم أي صيغة خاصة، فقط كتابة طبيعية.
+function formatRichText(text){
+  const rawBlocks = (text || "").split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+  if (!rawBlocks.length) return `<p style="color:var(--muted);">لم تتم إضافة أي محتوى بعد.</p>`;
+
+  return rawBlocks.map(block => {
+    const lines = block.split("\n").map(l => l.trim()).filter(Boolean);
+    let heading = "";
+    let bodyLines = lines;
+    if (lines.length > 1 && /:\s*$/.test(lines[0]) && lines[0].length < 60) {
+      heading = lines[0].replace(/:\s*$/, "");
+      bodyLines = lines.slice(1);
+    }
+
+    const isBullet = (l) => /^[-•*]\s+/.test(l) || /^\d+[.)]\s+/.test(l);
+    let html = "";
+    let i = 0;
+    while (i < bodyLines.length) {
+      if (isBullet(bodyLines[i])) {
+        const items = [];
+        while (i < bodyLines.length && isBullet(bodyLines[i])) {
+          items.push(esc(bodyLines[i].replace(/^[-•*]\s+/, "").replace(/^\d+[.)]\s+/, "")));
+          i++;
+        }
+        html += `<ul>${items.map(t => `<li>${t}</li>`).join("")}</ul>`;
+      } else {
+        html += `<p>${esc(bodyLines[i])}</p>`;
+        i++;
+      }
+    }
+    return `<div class="policy-block">${heading ? `<h3>${esc(heading)}</h3>` : ""}${html}</div>`;
+  }).join("");
+}
+
 function openPoliciesModal(){
   modalBg.innerHTML = `
-    <div class="modal">
-      <div class="row">
-        <h2>السياسات والشروط</h2>
+    <div class="modal modal-lg">
+      <div class="modal-lg-head">
+        <div>
+          <h2>السياسات والشروط</h2>
+          <p>كل ما تحتاج معرفته قبل إتمام طلبك</p>
+        </div>
         <button class="close-x" id="closeModal">✕</button>
       </div>
-      <p style="white-space:pre-wrap;line-height:1.9;font-size:14px;">${esc(state.settings.policies || "")}</p>
+      <div class="modal-lg-body">${formatRichText(state.settings.policies)}</div>
     </div>
   `;
   document.getElementById("closeModal").onclick = closeModal;

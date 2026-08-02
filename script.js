@@ -1572,7 +1572,6 @@ function renderAdmin(){
       <button class="tab ${state.adminTab==='products'?'active':''}" data-tab="products">المنتجات</button>
       <button class="tab ${state.adminTab==='orders'?'active':''}" data-tab="orders">الحجوزات (${state.orders.length})${ordersBadge}</button>
       <button class="tab ${state.adminTab==='stats'?'active':''}" data-tab="stats">الإحصائيات</button>
-      <button class="tab ${state.adminTab==='coupons'?'active':''}" data-tab="coupons">الكوبونات</button>
       <button class="tab ${state.adminTab==='activity'?'active':''}" data-tab="activity">سجل النشاط</button>
       <button class="tab ${state.adminTab==='settings'?'active':''}" data-tab="settings">الإعدادات</button>
       <button class="tab ${state.adminTab==='admins'?'active':''}" data-tab="admins">المشرفون</button>
@@ -1626,7 +1625,6 @@ function renderAdmin(){
   }
   else if (state.adminTab === "orders") renderOrdersTab(body);
   else if (state.adminTab === "stats" && isOwner) renderStatsTab(body);
-  else if (state.adminTab === "coupons" && isOwner) renderCouponsTab(body);
   else if (state.adminTab === "activity" && isOwner) renderActivityTab(body);
   else if (state.adminTab === "settings" && isOwner) renderSettingsTab(body);
   else if (state.adminTab === "admins" && isOwner) renderAdminsTab(body);
@@ -2072,85 +2070,6 @@ function printProductionSlip(o){
 }
 
 /* ======================= تبويب الإحصائيات ======================= */
-/* ======================= تبويب الكوبونات ======================= */
-async function renderCouponsTab(body){
-  body.innerHTML = `<p class="hint center" style="padding:20px 0;">جارِ التحميل...</p>`;
-  let coupons = [];
-  try {
-    const { data, error } = await supabaseClient.from('coupons').select('*').order('created_at', { ascending: false });
-    if (!error && data) coupons = data;
-  } catch (e) { console.error("coupons load error", e); }
-
-  body.innerHTML = `
-    <div class="panel">
-      <h3>إضافة كوبون جديد</h3>
-      <input class="plain-input" id="cCode" placeholder="الكود (مثال: EID20)" dir="ltr" style="text-transform:uppercase;">
-      <div style="display:flex;gap:10px;margin-bottom:10px;">
-        <select id="cType" style="flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-family:inherit;">
-          <option value="percent">نسبة مئوية %</option>
-          <option value="fixed">مبلغ ثابت (د.ع)</option>
-        </select>
-        <input class="plain-input" id="cValue" placeholder="القيمة" inputmode="numeric" style="flex:1;margin-bottom:0;">
-      </div>
-      <div class="err" id="cErr" style="margin:-6px 0 10px;"></div>
-      <button class="primary-btn" id="addCoupon">+ إضافة الكوبون</button>
-    </div>
-    <div class="panel">
-      <h3>الكوبونات الحالية</h3>
-      ${coupons.length === 0 ? `<p class="hint">لا توجد كوبونات مضافة بعد.</p>` : coupons.map(c => `
-        <div class="prod-row">
-          <div class="info">
-            <h4 dir="ltr" style="text-align:right;">${esc(c.code)}</h4>
-            <p>${c.discount_type === 'percent' ? `خصم ${esc(c.discount_value)}%` : `خصم ${money(c.discount_value)} د.ع`} — ${c.active ? '<span style="color:var(--moss);">فعّال</span>' : '<span style="color:var(--muted);">معطّل</span>'}</p>
-          </div>
-          <button class="del-btn" data-toggle-coupon="${c.id}" data-active="${c.active}" title="${c.active ? 'تعطيل' : 'تفعيل'}">${c.active ? '⏸' : '▶️'}</button>
-          <button class="del-btn" data-del-coupon="${c.id}">🗑</button>
-        </div>
-      `).join("")}
-    </div>
-  `;
-
-  document.getElementById("addCoupon").onclick = async () => {
-    const code = document.getElementById("cCode").value.trim().toUpperCase();
-    const type = document.getElementById("cType").value;
-    const value = Number(document.getElementById("cValue").value);
-    const errEl = document.getElementById("cErr");
-    errEl.textContent = "";
-    if (!code) { errEl.textContent = "أدخل كود الكوبون"; return; }
-    if (!value || value <= 0) { errEl.textContent = "أدخل قيمة صحيحة أكبر من صفر"; return; }
-    if (type === "percent" && value > 100) { errEl.textContent = "النسبة المئوية لا يمكن أن تتجاوز 100"; return; }
-
-    const btn = document.getElementById("addCoupon");
-    btn.disabled = true; btn.textContent = "جارِ الإضافة...";
-    const { error } = await supabaseClient.from('coupons').insert([{ code, discount_type: type, discount_value: value, active: true }]);
-    if (error) {
-      console.error("add coupon error", error);
-      errEl.textContent = error.message?.includes("duplicate") ? "هذا الكود مستخدم مسبقًا" : "تعذر إضافة الكوبون";
-      btn.disabled = false; btn.textContent = "+ إضافة الكوبون";
-      return;
-    }
-    showToast("تمت إضافة الكوبون بنجاح");
-    renderCouponsTab(body);
-  };
-
-  body.querySelectorAll("[data-toggle-coupon]").forEach(b => {
-    b.onclick = async () => {
-      const newActive = b.dataset.active !== "true";
-      const { error } = await supabaseClient.from('coupons').update({ active: newActive }).eq('id', b.dataset.toggleCoupon);
-      if (error) { showToast("تعذر التحديث", "err"); return; }
-      renderCouponsTab(body);
-    };
-  });
-  body.querySelectorAll("[data-del-coupon]").forEach(b => {
-    b.onclick = async () => {
-      if (!confirm("حذف هذا الكوبون؟")) return;
-      const { error } = await supabaseClient.from('coupons').delete().eq('id', b.dataset.delCoupon);
-      if (error) { showToast("تعذر الحذف", "err"); return; }
-      showToast("تم حذف الكوبون");
-      renderCouponsTab(body);
-    };
-  });
-}
 
 /* ======================= تبويب سجل النشاط ======================= */
 async function renderActivityTab(body){

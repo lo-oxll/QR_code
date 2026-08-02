@@ -118,28 +118,29 @@ h1.brand{font-size:clamp(26px,7vw,46px);margin:0;line-height:1;color:var(--ink);
 
 /* شريط علوي ثابت: مفتاح الوضع الليلي/النهاري + زر السلة بجانبه — تفضيل الوضع محفوظ بهذا المتصفح فقط */
 .top-bar{
-  position:fixed;top:14px;inset-inline-end:14px;display:flex;align-items:center;gap:10px;z-index:41;
+  position:fixed;top:14px;inset-inline-start:14px;display:flex;align-items:center;gap:12px;z-index:41;
 }
 .switch{
-  position:relative;width:54px;height:30px;border-radius:999px;flex-shrink:0;
+  position:relative;width:64px;height:34px;border-radius:999px;flex-shrink:0;
   border:2px solid var(--btn-border);background:var(--card);cursor:pointer;padding:0;
   box-shadow:0 4px 14px rgba(0,0,0,.15);transition:background .25s;
 }
 [data-theme="dark"] .switch{background:var(--onyx);}
 .switch-thumb{
-  position:absolute;top:1px;inset-inline-start:1px;width:22px;height:22px;border-radius:50%;
-  background:var(--onyx);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;
+  position:absolute;top:1px;inset-inline-start:1px;width:26px;height:26px;border-radius:50%;
+  background:var(--onyx);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;
   box-shadow:0 2px 6px rgba(0,0,0,.25);
   transition:inset-inline-start .25s cubic-bezier(.2,.8,.2,1), background .25s;
 }
-[data-theme="dark"] .switch-thumb{inset-inline-start:calc(100% - 24px);background:var(--moss);}
+[data-theme="dark"] .switch-thumb{inset-inline-start:calc(100% - 28px);background:var(--moss);}
+/* زر السلة بشكل مفتوح (خلفية فاتحة بإطار) بدل تعبئة غامقة، وقطره = طول مفتاح الوضع الليلي (64px) */
 .cart-top-btn{
-  position:relative;width:44px;height:44px;border-radius:50%;flex-shrink:0;
-  background:var(--onyx);color:#FFFFFF;border:2px solid var(--btn-border);
-  display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;
-  box-shadow:0 4px 14px rgba(0,0,0,.2);transition:background .25s, transform .2s;
+  position:relative;width:64px;height:64px;border-radius:50%;flex-shrink:0;
+  background:var(--surface);color:var(--ink);border:2px solid var(--btn-border);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;
+  box-shadow:0 4px 14px rgba(0,0,0,.12);transition:background .25s, border-color .25s, transform .2s;
 }
-.cart-top-btn:hover{background:var(--moss);transform:scale(1.06);}
+.cart-top-btn:hover{border-color:var(--moss);transform:scale(1.05);}
 
 .empty{text-align:center;padding:80px 0;color:var(--muted);}
 

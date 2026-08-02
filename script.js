@@ -197,6 +197,10 @@ let state = {
   newOrdersCount: 0,
   staffList: [],
   orderFilter: "pending", // "pending" (قيد المراجعة، الرئيسي) | "confirmed" | "cancelled"
+  storeSearch: "",       // نص البحث الحالي بواجهة المتجر
+  storeCategory: "all",  // فلترة حسب نوع المنتج (category) — "all" يعرض الكل
+  ordersDateFrom: "",    // فلترة الطلبات حسب التاريخ (تبويب الحجوزات) — من
+  ordersDateTo: "",      // فلترة الطلبات حسب التاريخ (تبويب الحجوزات) — إلى
 };
 
 const app = document.getElementById("app");
@@ -435,7 +439,31 @@ function render(){
 }
 
 function renderStore(){
-  const items = state.products.map(p => {
+  // --- بحث + فلترة حسب النوع (category) ---
+  // يعتمد على عمود "category" إن وُجد بجدول products؛ المنتجات بدون هذا الحقل تبقى ضمن "الكل" فقط
+  const q = (state.storeSearch || "").trim().toLowerCase();
+  const availableCategories = Array.from(new Set(state.products.map(p => p.category).filter(Boolean)));
+  const visibleProducts = state.products.filter(p => {
+    const matchesSearch = !q
+      || (p.name || "").toLowerCase().includes(q)
+      || (p.description || "").toLowerCase().includes(q);
+    const matchesCategory = state.storeCategory === "all" || p.category === state.storeCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const searchBarHtml = state.products.length > 0 ? `
+    <div class="store-search-bar" style="margin:18px 0 14px;">
+      <input type="search" id="storeSearchInput" class="plain-input" style="margin-bottom:10px;" placeholder="🔍 ابحث عن منتج..." value="${esc(state.storeSearch)}">
+      ${availableCategories.length ? `
+        <div class="size-row" style="justify-content:center;flex-wrap:wrap;">
+          <button type="button" class="size-chip ${state.storeCategory==='all'?'active':''}" data-cat="all">الكل</button>
+          ${availableCategories.map(c => `<button type="button" class="size-chip ${state.storeCategory===c?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join("")}
+        </div>
+      ` : ""}
+    </div>
+  ` : "";
+
+  const items = visibleProducts.map(p => {
     const colors = parseColors(p);
     const sizes = parseSizes(p);
     const vs = getVariantState(p.id);
@@ -449,7 +477,7 @@ function renderStore(){
     const is3d = activeColor?.type === "3d" && activeImages.length > 1;
 
     const imgTag = shownImage
-      ? `<img id="img-${esc(p.id)}" src="${esc(shownImage)}" alt="${esc(p.name)}" style="object-position:${esc(p.image_position || '50% 50%')};" draggable="false">`
+      ? `<img id="img-${esc(p.id)}" src="${esc(shownImage)}" alt="${esc(p.name)}" style="object-position:${esc(p.image_position || '50% 50%')};" draggable="false" loading="lazy" decoding="async">`
       : '🖨️';
 
     const colorRow = colors.length ? `
@@ -510,7 +538,12 @@ function renderStore(){
         </div>
         <button class="ghost-btn" id="customOrderBtn" style="margin:16px auto 0;max-width:280px;">🎨 اطلب تصميمك الخاص</button>
       </header>
-      ${state.products.length === 0 ? `<div class="empty">لم تتم إضافة أي منتجات بعد.</div>` : `<div class="grid">${items}</div>`}
+      ${searchBarHtml}
+      ${state.products.length === 0
+        ? `<div class="empty">لم تتم إضافة أي منتجات بعد.</div>`
+        : (visibleProducts.length === 0
+          ? `<div class="empty">لا توجد نتائج مطابقة لبحثك.</div>`
+          : `<div class="grid">${items}</div>`)}
       ${state.reviews.length > 0 ? `
         <div style="margin-top:36px;">
           <h2 class="display" style="font-size:20px;text-align:center;margin-bottom:16px;">آراء عملائنا</h2>
@@ -540,6 +573,24 @@ function renderStore(){
   // النقر 3 مرات على عنوان المتجر يفتح تسجيل دخول الإدارة (بدون أي زر ظاهر)
   const titleEl = document.getElementById("storeTitle");
   if (titleEl) titleEl.addEventListener("click", handleTitleClickForAdmin);
+
+  // --- البحث الفوري: نعيد الرسم الكامل، لكن نعيد التركيز على حقل البحث وموضع المؤشر حتى لا ينقطع الكتابة ---
+  const searchInput = document.getElementById("storeSearchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      state.storeSearch = e.target.value;
+      const caret = e.target.selectionStart;
+      renderStore();
+      const newInput = document.getElementById("storeSearchInput");
+      if (newInput) { newInput.focus(); newInput.setSelectionRange(caret, caret); }
+    });
+  }
+  app.querySelectorAll("[data-cat]").forEach(chip => {
+    chip.addEventListener("click", () => {
+      state.storeCategory = chip.dataset.cat;
+      renderStore();
+    });
+  });
 
   // --- تفاعل الألوان: النقر على أي لون يبدّل صورة البطاقة فورًا دون إعادة رسم الصفحة كاملة ---
   app.querySelectorAll("[data-colors]").forEach(row => {
@@ -925,19 +976,6 @@ function openCartCheckoutModal(){
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
         <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام" value="${esc(vals.instagram)}" dir="ltr"></div><div class="err" id="errInsta"></div></div>
 
-        ${appliedCoupon ? `
-          <div style="display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:12px;padding:10px 14px;margin-bottom:10px;font-size:13px;">
-            <span>✅ كود "${esc(appliedCoupon.code)}" مُطبَّق</span>
-            <button type="button" id="removeCoupon" style="background:none;border:0;color:var(--err);cursor:pointer;font-size:13px;">إزالة</button>
-          </div>
-        ` : `
-          <div style="display:flex;gap:8px;margin-bottom:10px;">
-            <input class="plain-input" id="couponInput" placeholder="كود الخصم (اختياري)" dir="ltr" style="margin-bottom:0;flex:1;">
-            <button type="button" id="applyCoupon" style="border:2px solid var(--btn-border);background:none;border-radius:12px;padding:0 16px;font-family:inherit;font-size:13px;cursor:pointer;">تطبيق</button>
-          </div>
-          <div class="err" id="couponErr" style="margin:-6px 0 10px;"></div>
-        `}
-
         ${discount > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:2px;"><span>السعر قبل الخصم</span><span>${money(total)} د.ع</span></div>
         <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--moss);margin-bottom:6px;"><span>الخصم</span><span>-${money(discount)} د.ع</span></div>` : ""}
         <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(finalTotal)} د.ع</span></div>
@@ -954,33 +992,8 @@ function openCartCheckoutModal(){
     document.getElementById("fInsta").oninput = (e) => vals.instagram = e.target.value;
     renderStreetChips();
 
-    const applyCouponBtn = document.getElementById("applyCoupon");
-    if (applyCouponBtn) {
-      applyCouponBtn.onclick = async () => {
-        const code = document.getElementById("couponInput").value.trim().toUpperCase();
-        const errEl = document.getElementById("couponErr");
-        errEl.textContent = "";
-        if (!code) { errEl.textContent = "أدخل كود الخصم"; return; }
-        applyCouponBtn.disabled = true; applyCouponBtn.textContent = "...";
-        try {
-          const { data, error } = await supabaseClient.rpc('validate_coupon', { p_code: code });
-          if (error) throw error;
-          if (!data || data.length === 0) {
-            errEl.textContent = "كود غير صالح أو منتهي";
-          } else {
-            appliedCoupon = { code, discount_type: data[0].discount_type, discount_value: data[0].discount_value };
-          }
-        } catch (e) {
-          console.error("coupon validate error", e);
-          errEl.textContent = "تعذر التحقق من الكود";
-        }
-        paint();
-      };
-    }
-    const removeCouponBtn = document.getElementById("removeCoupon");
-    if (removeCouponBtn) {
-      removeCouponBtn.onclick = () => { appliedCoupon = null; paint(); };
-    }
+    // ملاحظة: تم إزالة واجهة كود الخصم بالكامل من صفحة الدفع بناءً على طلب صاحب المتجر.
+    // appliedCoupon يبقى null دائمًا الآن، لذا الخصم = 0 والإجمالي = السعر الكامل دومًا.
 
     if (!citiesFailed) {
       document.getElementById("fCity").onchange = async (e) => {
@@ -1629,7 +1642,7 @@ function renderProductsReadOnly(body){
   }
   body.innerHTML = `<div id="prodListRO"></div>`;
   document.getElementById("prodListRO").innerHTML = state.products.map(p => {
-    const prodImg = p.image ? '<img src="' + esc(p.image) + '" style="object-position:' + esc(p.image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
+    const prodImg = p.image ? '<img src="' + esc(p.image) + '" loading="lazy" decoding="async" style="object-position:' + esc(p.image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
     return `
       <div class="prod-row">
         ${prodImg}
@@ -1655,6 +1668,7 @@ function renderProductsTab(body){
       <p class="hint" id="dragHint" style="display:none;margin-top:-8px;">اسحب الصورة داخل الإطار لضبط الجزء الظاهر منها</p>
       <input class="plain-input" id="pName" placeholder="اسم المنتج">
       <div class="err" id="errPName" style="margin:-6px 0 10px;"></div>
+      <input class="plain-input" id="pCategory" placeholder="النوع/التصنيف (مثال: تشيرتات، أوشحة، باجات) — اختياري">
       <input class="plain-input" id="pPrice" placeholder="السعر (د.ع)" inputmode="numeric">
       <div class="err" id="errPPrice" style="margin:-6px 0 10px;"></div>
       <textarea class="plain-textarea" id="pDesc" placeholder="وصف مختصر (اختياري)" rows="2"></textarea>
@@ -1847,7 +1861,9 @@ function renderProductsTab(body){
     const btn = document.getElementById("addBtn");
     btn.disabled = true; btn.textContent = "جارِ الحفظ...";
 
+    const category = document.getElementById("pCategory").value.trim();
     const row = { name, price: Number(price), description: desc, image: pendingImage };
+    if (category) row.category = category;
     if (pendingImage) row.image_position = `${pendingPos.x}% ${pendingPos.y}%`;
     if (pendingSizes.size) row.sizes = [...pendingSizes].join(",");
     if (pendingColors.length) row.colors = pendingColors;
@@ -1873,7 +1889,7 @@ function renderProductsTab(body){
     list.innerHTML = `<p class="hint center">لا توجد منتجات مضافة بعد.</p>`;
   } else {
     list.innerHTML = state.products.map(p => {
-      const prodImg = p.image ? '<img src="' + esc(p.image) + '" style="object-position:' + esc(p.image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
+      const prodImg = p.image ? '<img src="' + esc(p.image) + '" loading="lazy" decoding="async" style="object-position:' + esc(p.image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
       const colors = parseColors(p);
       const sizes = parseSizes(p);
       const variantBits = [];
@@ -2183,6 +2199,8 @@ function renderStatsTab(body){
   const topProducts = Object.entries(productCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxCount = topProducts.length ? topProducts[0][1] : 1;
 
+  const cancellationChartHtml = renderCancellationRateChart(state.orders);
+
   body.innerHTML = `
     <div class="panel">
       <h3>نظرة عامة (الطلبات المؤكدة)</h3>
@@ -2218,7 +2236,115 @@ function renderStatsTab(body){
         </div>
       `).join("")}
     </div>
+    <div class="panel">
+      <h3>نسبة الإلغاء عبر الزمن (آخر 14 يوم)</h3>
+      ${cancellationChartHtml}
+    </div>
   `;
+}
+
+// يرسم مخطط أعمدة بسيط (SVG) لكل يوم من آخر 14 يوم: عدد الطلبات المؤكدة/الملغية ونسبة الإلغاء
+function renderCancellationRateChart(orders){
+  const DAYS = 14;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const buckets = [];
+  for (let i = DAYS - 1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    buckets.push({ date: d, confirmed: 0, cancelled: 0 });
+  }
+  const dayKey = (d) => d.toISOString().slice(0, 10);
+  const bucketByKey = {};
+  buckets.forEach(b => bucketByKey[dayKey(b.date)] = b);
+
+  orders.forEach(o => {
+    if (!o.created_at) return;
+    const created = new Date(o.created_at); created.setHours(0,0,0,0);
+    const key = dayKey(created);
+    const bucket = bucketByKey[key];
+    if (!bucket) return; // خارج نطاق الـ14 يوم
+    const status = reviewStatus(o);
+    if (status === "confirmed") bucket.confirmed++;
+    else if (status === "cancelled") bucket.cancelled++;
+  });
+
+  const totalConfirmed = buckets.reduce((s,b)=>s+b.confirmed,0);
+  const totalCancelled = buckets.reduce((s,b)=>s+b.cancelled,0);
+  const overallRate = (totalConfirmed + totalCancelled) > 0 ? Math.round((totalCancelled / (totalConfirmed + totalCancelled)) * 100) : 0;
+
+  const maxTotal = Math.max(1, ...buckets.map(b => b.confirmed + b.cancelled));
+  const barW = 20, gap = 6, chartH = 90;
+  const svgW = buckets.length * (barW + gap);
+
+  const bars = buckets.map((b, i) => {
+    const total = b.confirmed + b.cancelled;
+    const x = i * (barW + gap);
+    const confirmedH = total ? Math.round((b.confirmed / maxTotal) * chartH) : 0;
+    const cancelledH = total ? Math.round((b.cancelled / maxTotal) * chartH) : 0;
+    const rate = total ? Math.round((b.cancelled / total) * 100) : 0;
+    const label = b.date.toLocaleDateString("ar", { day: "numeric", month: "numeric" });
+    return `
+      <g>
+        <title>${label} — مؤكد: ${b.confirmed}، ملغي: ${b.cancelled}${total ? ` (نسبة إلغاء ${rate}%)` : ""}</title>
+        <rect x="${x}" y="${chartH - confirmedH - cancelledH}" width="${barW}" height="${confirmedH}" fill="var(--moss, #4a7c59)" rx="2"></rect>
+        <rect x="${x}" y="${chartH - cancelledH}" width="${barW}" height="${cancelledH}" fill="var(--err, #e5484d)" rx="2"></rect>
+      </g>
+    `;
+  }).join("");
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="display:flex;gap:14px;font-size:12px;color:var(--muted);">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--moss,#4a7c59);border-radius:3px;margin-left:4px;"></span>مؤكدة</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--err,#e5484d);border-radius:3px;margin-left:4px;"></span>ملغية</span>
+      </div>
+      <div style="font-size:13px;font-weight:800;">نسبة الإلغاء الإجمالية: ${overallRate}%</div>
+    </div>
+    <div style="overflow-x:auto;">
+      <svg viewBox="0 0 ${svgW} ${chartH}" width="${svgW}" height="${chartH}" style="min-width:${svgW}px;">${bars}</svg>
+    </div>
+  `;
+}
+
+// تصدير الطلبات المعروضة حاليًا (بعد أي فلترة بالحالة/التاريخ) إلى ملف CSV يفتح مباشرة في Excel
+// نستخدم BOM (\uFEFF) في البداية حتى يعرض Excel الحروف العربية بشكل صحيح بدل رموز غريبة
+function exportOrdersToCsv(orders){
+  if (!orders || orders.length === 0) { showToast("لا توجد طلبات لتصديرها ضمن هذا الفلتر", "err"); return; }
+
+  const headers = ["رقم الطلب", "التاريخ", "الحالة", "اسم العميل", "الهاتف", "المدينة", "المنطقة", "العنوان", "المنتج", "الكمية", "الإجمالي (د.ع)", "انستغرام"];
+  const statusLabel = { pending: "قيد المراجعة", confirmed: "مؤكد", cancelled: "ملغي" };
+
+  const csvEscape = (val) => {
+    const s = String(val ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const rows = orders.map(o => [
+    orderRef(o),
+    new Date(o.created_at).toLocaleString("ar"),
+    statusLabel[reviewStatus(o)] || reviewStatus(o),
+    o.customer_name || "",
+    o.phone_number || o.phone || "",
+    o.city_name || "",
+    o.region_name || "",
+    o.address || o.location || "",
+    o.product_name || "",
+    o.qty || 1,
+    o.total || 0,
+    o.instagram_username || ""
+  ]);
+
+  const csvContent = "\uFEFF" + [headers, ...rows].map(r => r.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const dateTag = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `طلبات-QRCODE-${dateTag}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast(`تم تصدير ${orders.length} طلب بنجاح`);
 }
 
 function renderOrdersTab(body){
@@ -2238,12 +2364,38 @@ function renderOrdersTab(body){
     </div>
   `;
 
-  const filtered = state.orders.filter(o => reviewStatus(o) === state.orderFilter);
+  // فلترة حسب التاريخ + تصدير Excel/CSV للمحاسبة والجرد الشهري
+  const dateToolsHtml = `
+    <div class="panel" style="margin-bottom:16px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1;min-width:130px;">
+          <label class="hint" style="display:block;margin-bottom:4px;">من تاريخ</label>
+          <input type="date" id="ordersDateFrom" class="plain-input" style="margin-bottom:0;" value="${esc(state.ordersDateFrom)}">
+        </div>
+        <div style="flex:1;min-width:130px;">
+          <label class="hint" style="display:block;margin-bottom:4px;">إلى تاريخ</label>
+          <input type="date" id="ordersDateTo" class="plain-input" style="margin-bottom:0;" value="${esc(state.ordersDateTo)}">
+        </div>
+        <button class="ghost-btn" id="clearDateFilter" style="height:44px;white-space:nowrap;">مسح الفلتر</button>
+        <button class="primary-btn" id="exportOrdersCsv" style="height:44px;white-space:nowrap;">⬇️ تصدير Excel (CSV)</button>
+      </div>
+    </div>
+  `;
+
+  const inDateRange = (o) => {
+    if (!state.ordersDateFrom && !state.ordersDateTo) return true;
+    const created = new Date(o.created_at);
+    if (state.ordersDateFrom && created < new Date(state.ordersDateFrom + "T00:00:00")) return false;
+    if (state.ordersDateTo && created > new Date(state.ordersDateTo + "T23:59:59")) return false;
+    return true;
+  };
+
+  const filtered = state.orders.filter(o => reviewStatus(o) === state.orderFilter && inDateRange(o));
 
   const listHtml = filtered.length === 0
     ? `<p class="hint center" style="padding:30px 0;">لا توجد حجوزات في هذا القسم.</p>`
     : filtered.map(o => {
-      const orderImg = o.product_image ? '<img src="' + esc(o.product_image) + '" style="object-position:' + esc(o.product_image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
+      const orderImg = o.product_image ? '<img src="' + esc(o.product_image) + '" loading="lazy" decoding="async" style="object-position:' + esc(o.product_image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
       const cannotSendToAlwaseet = !o.city_id || !o.region_id || o.alwaseet_status === 'sent';
       return `
         <div class="order-card">
@@ -2279,11 +2431,16 @@ function renderOrdersTab(body){
       `;
     }).join("");
 
-  body.innerHTML = filterTabsHtml + listHtml;
+  body.innerHTML = filterTabsHtml + dateToolsHtml + listHtml;
 
   body.querySelectorAll("[data-orderfilter]").forEach(b => {
     b.onclick = () => { state.orderFilter = b.dataset.orderfilter; renderOrdersTab(body); };
   });
+
+  document.getElementById("ordersDateFrom").onchange = (e) => { state.ordersDateFrom = e.target.value; renderOrdersTab(body); };
+  document.getElementById("ordersDateTo").onchange = (e) => { state.ordersDateTo = e.target.value; renderOrdersTab(body); };
+  document.getElementById("clearDateFilter").onclick = () => { state.ordersDateFrom = ""; state.ordersDateTo = ""; renderOrdersTab(body); };
+  document.getElementById("exportOrdersCsv").onclick = () => exportOrdersToCsv(filtered);
 
   // بعد تأكيد أو إلغاء الطلب، تُرسَل نسخة منه تلقائيًا إلى الرقم الرئيسي المسجَّل في الإعدادات،
   // مع اسم المشرف الذي اتخذ الإجراء، حتى يبقى صاحب المتجر مطّلعًا على كل حركة

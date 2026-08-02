@@ -56,6 +56,19 @@
   });
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="showStoreLoadError()"></script>
+<script>
+  // تسجيل Service Worker لتفعيل تحميل أسرع من الكاش وعمل جزئي بدون إنترنت.
+  // لا علاقة له ببيانات المنتجات/الطلبات (تُستثنى صراحة داخل sw.js وتبقى مباشرة من Supabase دائمًا)
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch((err) => {
+        // على iOS، فتح الرابط داخل متصفح مدمج بتطبيق (إنستغرام/واتساب/تيك توك) يمنع تسجيل
+        // Service Worker برسالة "non app-bound domain" — هذا متوقع وغير ضار، باقي الموقع يعمل طبيعي
+        console.warn("Service Worker غير متاح بهذا المتصفح (على الأغلب متصفح داخلي بتطبيق آخر):", err.message || err);
+      });
+    });
+  }
+</script>
 </head>
 <body>
 

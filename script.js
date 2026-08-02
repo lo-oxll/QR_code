@@ -11,7 +11,7 @@ try {
   if (typeof showStoreLoadError === "function") showStoreLoadError();
 }
 
-const KEYS = { PRODUCTS: "qissa:products", ORDERS: "qissa:orders", SETTINGS: "qissa:settings" };
+const KEYS = { PRODUCTS: "qissa:products", ORDERS: "qissa:orders", SETTINGS: "qissa:settings", CART: "qissa:cart" };
 const DEFAULT_PW_HASH = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4";
 
 function loadLocal(key, fallback) {
@@ -161,8 +161,7 @@ let state = {
   orders: [],
   reviews: [],
   settings: { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "", policies: DEFAULT_POLICIES, aboutUs: DEFAULT_ABOUT },
-  selectedProduct: null,
-  selectedVariant: null, // { colorName, size } يُملأ عند الضغط على "احجز الآن" من بطاقة المنتج
+  cart: [], // { productId, name, price, colorName, size, qty, image, imagePosition }
   // بيانات المشرف الحالي (owner أو staff) - محفوظة في الذاكرة فقط لهذه الجلسة، لا تُخزَّن على القرص
   currentAdmin: null, // { username, role, passwordHash }
   newOrdersCount: 0,
@@ -177,6 +176,37 @@ const modalBg = document.getElementById("modalBg");
 function esc(s){ return (s ?? "").toString().replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function money(n){ return Number(n||0).toLocaleString("ar"); }
 function orderRef(o){ return "#" + String(o.id).slice(-6).toUpperCase(); }
+
+/* ======================= إدارة السلة (محلية بالمتصفح، لا تُرسل لقاعدة البيانات إلا عند إتمام الطلب) ======================= */
+function saveCart(){ saveLocal(KEYS.CART, state.cart); }
+
+function addToCart(product, variant){
+  const colorName = variant?.colorName || null;
+  const size = variant?.size || null;
+  const existing = state.cart.find(i => i.productId === product.id && i.colorName === colorName && i.size === size);
+  if (existing) {
+    existing.qty += 1;
+  } else {
+    state.cart.push({
+      productId: product.id,
+      name: product.name,
+      price: Number(product.price),
+      colorName, size, qty: 1,
+      image: product.image || "",
+      imagePosition: product.image_position || "50% 50%"
+    });
+  }
+  saveCart();
+}
+
+function cartCount(){ return state.cart.reduce((sum, i) => sum + i.qty, 0); }
+function cartSubtotal(){ return state.cart.reduce((sum, i) => sum + i.price * i.qty, 0); }
+function updateCartBadge(){
+  const btn = document.getElementById("cartFab");
+  if (!btn) return;
+  const count = cartCount();
+  btn.innerHTML = `🛒${count > 0 ? `<span class="notif-badge" id="cartBadge" style="top:-4px;left:-4px;">${count}</span>` : ""}`;
+}
 
 // يحوّل حقل sizes النصي (مثل "S,M,L") إلى مصفوفة قياسات نظيفة، ويتجاهله بأمان إن كان غير معرّف أصلًا
 function parseSizes(p){
@@ -422,7 +452,7 @@ function renderStore(){
         </div>
         ${outOfStock
           ? `<button class="book-btn" disabled style="opacity:.5;cursor:not-allowed;">نفذت الكمية</button>`
-          : `<button class="book-btn" data-book="${esc(p.id)}">احجز الآن</button>`}
+          : `<button class="book-btn" data-book="${esc(p.id)}">🛒 أضف للسلة</button>`}
       </div>
     `;
   }).join("");
@@ -472,6 +502,9 @@ function renderStore(){
       </div>
     </div>
     <button class="fab" id="adminFab" title="دخول الإدارة">🔒</button>
+    <button class="fab" id="cartFab" title="السلة" style="left:auto;right:20px;">
+      🛒${cartCount() > 0 ? `<span class="notif-badge" id="cartBadge" style="top:-4px;left:-4px;">${cartCount()}</span>` : ""}
+    </button>
   `;
 
   // --- تفاعل الألوان: النقر على أي لون يبدّل صورة البطاقة فورًا دون إعادة رسم الصفحة كاملة ---
@@ -575,18 +608,16 @@ function renderStore(){
       }
       const colors = parseColors(p);
       const activeColor = colors[vs.colorIdx] || null;
-      state.selectedProduct = p;
-      state.selectedVariant = {
-        colorName: activeColor?.name || null,
-        size: vs.size || null
-      };
-      openBookingModal();
+      addToCart(p, { colorName: activeColor?.name || null, size: vs.size || null });
+      showToast("أُضيف للسلة 🛒");
+      updateCartBadge();
     });
   });
   document.getElementById("adminFab").addEventListener("click", () => {
     state.view = "adminLogin";
     render();
   });
+  document.getElementById("cartFab").addEventListener("click", () => openCartModal());
   document.getElementById("customOrderBtn").addEventListener("click", () => {
     openCustomOrderModal();
   });
@@ -721,6 +752,80 @@ function openTrackOrderModal(){
   };
 }
 
+function openCartModal(){
+  function paint(){
+    if (state.cart.length === 0) {
+      modalBg.innerHTML = `
+        <div class="modal">
+          <div class="row">
+            <h2>سلتك</h2>
+            <button class="close-x" id="closeModal">✕</button>
+          </div>
+          <p class="hint center" style="padding:20px 0;">سلتك فارغة. أضف منتجات من المتجر أولًا.</p>
+        </div>
+      `;
+      document.getElementById("closeModal").onclick = closeModal;
+      modalBg.onclick = (e) => { if (e.target === modalBg) closeModal(); };
+      return;
+    }
+
+    const itemsHtml = state.cart.map((i, idx) => {
+      const variantParts = [];
+      if (i.colorName) variantParts.push(i.colorName);
+      if (i.size) variantParts.push(i.size);
+      const img = i.image ? `<img src="${esc(i.image)}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;object-position:${esc(i.imagePosition || '50% 50%')};">` : `<div class="ph" style="width:48px;height:48px;border-radius:10px;"></div>`;
+      return `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);">
+          ${img}
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(i.name)}</div>
+            ${variantParts.length ? `<div style="font-size:11px;color:var(--muted);">${esc(variantParts.join(" · "))}</div>` : ""}
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">${money(i.price)} د.ع</div>
+          </div>
+          <div class="qty-ctl">
+            <button data-cartminus="${idx}">−</button>
+            <span style="min-width:18px;text-align:center;font-weight:700;">${i.qty}</span>
+            <button data-cartplus="${idx}">+</button>
+          </div>
+          <button data-cartremove="${idx}" style="background:none;border:0;color:var(--err);font-size:16px;cursor:pointer;">🗑</button>
+        </div>
+      `;
+    }).join("");
+
+    modalBg.innerHTML = `
+      <div class="modal">
+        <div class="row">
+          <h2>سلتك</h2>
+          <button class="close-x" id="closeModal">✕</button>
+        </div>
+        <div>${itemsHtml}</div>
+        <div class="total-row"><span style="font-weight:400;color:var(--muted)">المجموع</span><span>${money(cartSubtotal())} د.ع</span></div>
+        <button class="primary-btn" id="goCheckout">متابعة الطلب</button>
+      </div>
+    `;
+    document.getElementById("closeModal").onclick = closeModal;
+    modalBg.onclick = (e) => { if (e.target === modalBg) closeModal(); };
+    document.getElementById("goCheckout").onclick = () => { openCartCheckoutModal(); };
+
+    modalBg.querySelectorAll("[data-cartplus]").forEach(b => {
+      b.onclick = () => { state.cart[Number(b.dataset.cartplus)].qty += 1; saveCart(); updateCartBadge(); paint(); };
+    });
+    modalBg.querySelectorAll("[data-cartminus]").forEach(b => {
+      b.onclick = () => {
+        const idx = Number(b.dataset.cartminus);
+        state.cart[idx].qty -= 1;
+        if (state.cart[idx].qty <= 0) state.cart.splice(idx, 1);
+        saveCart(); updateCartBadge(); paint();
+      };
+    });
+    modalBg.querySelectorAll("[data-cartremove]").forEach(b => {
+      b.onclick = () => { state.cart.splice(Number(b.dataset.cartremove), 1); saveCart(); updateCartBadge(); paint(); };
+    });
+  }
+  paint();
+  modalBg.classList.add("open");
+}
+
 function openPoliciesModal(){
   modalBg.innerHTML = `
     <div class="modal">
@@ -736,55 +841,44 @@ function openPoliciesModal(){
   modalBg.classList.add("open");
 }
 
-/* ---------- نافذة الحجز ---------- */
-function openBookingModal(){
-  const p = state.selectedProduct;
-  const variant = state.selectedVariant || {};
-  const variantParts = [];
-  if (variant.colorName) variantParts.push(`اللون: ${variant.colorName}`);
-  if (variant.size) variantParts.push(`القياس: ${variant.size}`);
-  const variantLine = variantParts.length
-    ? `<div style="font-size:12px;color:var(--moss);font-weight:700;margin-top:2px;">${esc(variantParts.join(" · "))}</div>`
-    : "";
-  let qty = 1;
+/* ---------- نافذة إتمام الطلب (سلة متعددة المنتجات) ---------- */
+function openCartCheckoutModal(){
   let cities = [];
   let regions = [];
   let citiesFailed = false;
   // القيم تُحفظ هنا وتُعاد تعبئتها في كل إعادة رسم، لأن paint() يعيد بناء الـ HTML من الصفر
-  // في كل مرة (عند تغيير الكمية أو المدينة)، وبدون هذا كانت قيم الحقول تُمسح بالكامل.
+  // في كل مرة (عند تغيير المدينة مثلًا)، وبدون هذا كانت قيم الحقول تُمسح بالكامل.
   const vals = { name: "", loc: "", phone: "", instagram: "", cityId: "", cityName: "", regionId: "", regionName: "" };
   let appliedCoupon = null; // { code, discount_type, discount_value }
 
   function paint(){
-    const total = qty * Number(p.price);
+    const total = cartSubtotal();
     const discount = appliedCoupon
       ? Math.min(total, appliedCoupon.discount_type === 'percent' ? Math.round(total * appliedCoupon.discount_value / 100) : appliedCoupon.discount_value)
       : 0;
     const finalTotal = total - discount;
-    const modalImg = p.image ? '<img src="' + esc(p.image) + '" style="object-position:' + esc(p.image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
+    const itemsHtml = state.cart.map(i => {
+      const variantParts = [];
+      if (i.colorName) variantParts.push(i.colorName);
+      if (i.size) variantParts.push(i.size);
+      return `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;">${esc(i.name)}${variantParts.length ? ` <span style="color:var(--muted);font-weight:400;">(${esc(variantParts.join(" · "))})</span>` : ""}</div>
+            <div style="font-size:12px;color:var(--muted);">${i.qty} × ${money(i.price)} د.ع</div>
+          </div>
+          <div style="font-weight:700;font-size:13px;">${money(i.price * i.qty)} د.ع</div>
+        </div>
+      `;
+    }).join("");
     const cityOptions = cities.map(c => `<option value="${esc(c.id)}" ${String(c.id)===String(vals.cityId) ? "selected" : ""}>${esc(c.city_name)}</option>`).join("");
     modalBg.innerHTML = `
       <div class="modal">
         <div class="row">
-          <h2>تأكيد الحجز</h2>
+          <h2>إتمام الطلب</h2>
           <button class="close-x" id="closeModal">✕</button>
         </div>
-        <div class="product-preview">
-          ${modalImg}
-          <div>
-            <div style="font-weight:600">${esc(p.name)}</div>
-            <div style="font-size:13px;color:var(--muted)">${money(p.price)} د.ع للقطعة</div>
-            ${variantLine}
-          </div>
-        </div>
-        <div class="qty-row">
-          <span style="font-size:14px;font-weight:600;">الكمية</span>
-          <div class="qty-ctl">
-            <button id="qtyMinus">−</button>
-            <span id="qtyVal" style="min-width:20px;text-align:center;font-weight:700;">${qty}</span>
-            <button id="qtyPlus">+</button>
-          </div>
-        </div>
+        <div style="margin-bottom:14px;">${itemsHtml}</div>
         <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
         ${citiesFailed ? "" : `
         <div class="field"><div class="box">🏙️<select id="fCity" style="width:100%;background:transparent;border:0;outline:0;font-family:'Cairo',sans-serif;font-size:14px;">
@@ -818,15 +912,13 @@ function openBookingModal(){
         ${discount > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:2px;"><span>السعر قبل الخصم</span><span>${money(total)} د.ع</span></div>
         <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--moss);margin-bottom:6px;"><span>الخصم</span><span>-${money(discount)} د.ع</span></div>` : ""}
         <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(finalTotal)} د.ع</span></div>
-        <button class="primary-btn" id="submitOrder">تأكيد الحجز</button>
+        <button class="primary-btn" id="submitOrder">تأكيد الطلب</button>
       </div>
     `;
     document.getElementById("closeModal").onclick = closeModal;
     modalBg.onclick = (e) => { if (e.target === modalBg) closeModal(); };
-    document.getElementById("qtyMinus").onclick = () => { qty = Math.max(1, qty-1); paint(); };
-    document.getElementById("qtyPlus").onclick = () => { qty = Math.min(10, qty+1); paint(); };
     document.getElementById("submitOrder").onclick = submit;
-    // حفظ القيم فور كتابتها حتى تبقى محفوظة عبر أي إعادة رسم لاحقة (تغيير الكمية مثلًا)
+    // حفظ القيم فور كتابتها حتى تبقى محفوظة عبر أي إعادة رسم لاحقة
     document.getElementById("fName").oninput = (e) => vals.name = e.target.value;
     document.getElementById("fLoc").oninput = (e) => vals.loc = e.target.value;
     document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
@@ -944,6 +1036,7 @@ function openBookingModal(){
   })();
 
   async function submit(){
+    if (state.cart.length === 0) { showToast("السلة فارغة", "err"); return; }
     const name = vals.name.trim();
     const loc = vals.loc.trim();
     const phone = vals.phone.trim();
@@ -974,11 +1067,22 @@ function openBookingModal(){
     // بيانات الطلب — لأن أغلب المتصفحات تمنع فتح نافذة جديدة تلقائيًا بعد أي عملية غير متزامنة (await)
     const waWindow = window.open("", "_blank");
 
-    const total = qty * Number(p.price);
+    const cartItems = state.cart.map(i => ({
+      product_id: i.productId, name: i.name, price: i.price, qty: i.qty,
+      colorName: i.colorName, size: i.size
+    }));
+    const total = cartSubtotal();
     const discount = appliedCoupon
       ? Math.min(total, appliedCoupon.discount_type === 'percent' ? Math.round(total * appliedCoupon.discount_value / 100) : appliedCoupon.discount_value)
       : 0;
     const finalTotal = total - discount;
+    const totalQty = state.cart.reduce((s, i) => s + i.qty, 0);
+    const productSummary = state.cart.map(i => {
+      const parts = [];
+      if (i.colorName) parts.push(i.colorName);
+      if (i.size) parts.push(i.size);
+      return `${i.name}${parts.length ? ` (${parts.join(" · ")})` : ""} × ${i.qty}`;
+    }).join(", ");
     const cityName = vals.cityName;
     const regionName = vals.regionName;
 
@@ -991,13 +1095,14 @@ function openBookingModal(){
           customer_name: name,
           phone_number: phone,
           address: loc,
-          product_name: `${p.name}${variantParts.length ? " - " + variantParts.join(" - ") : ""} (عدد: ${qty})`,
+          product_name: productSummary,
+          cart_items: cartItems,
           city_id: cityId || null,
           region_id: regionId || null,
           city_name: cityName || null,
           region_name: regionName || null,
           instagram_username: instagram || null,
-          qty,
+          qty: totalQty,
           total: finalTotal,
           coupon_code: appliedCoupon ? appliedCoupon.code : null,
           alwaseet_status: 'pending'
@@ -1009,27 +1114,33 @@ function openBookingModal(){
     if (error) {
       console.error("Database insert error:", error);
       if (waWindow) waWindow.close();
-      showToast("تعذر حفظ الحجز: " + (error.message || "خطأ غير معروف"), "err");
-      btn.disabled = false; btn.textContent = "تأكيد الحجز";
+      showToast("تعذر حفظ الطلب: " + (error.message || "خطأ غير معروف"), "err");
+      btn.disabled = false; btn.textContent = "تأكيد الطلب";
       return;
     }
 
-    // خصم الكمية من المخزون (فقط للمنتجات اللي حدّد لها صاحب المتجر كمية محدودة)
-    if (p.stock !== undefined && p.stock !== null) {
-      const newStock = Math.max(0, Number(p.stock) - qty);
-      try {
-        await supabaseClient.from('products').update({ stock: newStock }).eq('id', p.id);
-        p.stock = newStock;
-        const localP = state.products.find(x => String(x.id) === String(p.id));
-        if (localP) localP.stock = newStock;
-      } catch (e) {
-        console.error("stock update error", e);
+    // خصم الكمية من مخزون كل منتج بالسلة (فقط للمنتجات اللي حدّد لها صاحب المتجر كمية محدودة)
+    for (const item of state.cart) {
+      const localP = state.products.find(x => String(x.id) === String(item.productId));
+      if (localP && localP.stock !== undefined && localP.stock !== null) {
+        const newStock = Math.max(0, Number(localP.stock) - item.qty);
+        try {
+          await supabaseClient.from('products').update({ stock: newStock }).eq('id', localP.id);
+          localP.stock = newStock;
+        } catch (e) {
+          console.error("stock update error", e);
+        }
       }
     }
 
-    // تحديث فوري للواجهة محليًا (الصورة تُعرض هنا فقط، لأن جدول orders الأصلي لا يخزنها)
-    const localOrder = { ...inserted, product_image: p.image || "", product_image_position: p.image_position || "50% 50%" };
+    // تحديث فوري للواجهة محليًا (صورة أول منتج بالسلة تُستخدم للمعاينة فقط، لأن جدول orders لا يخزنها)
+    const firstItem = state.cart[0];
+    const localOrder = { ...inserted, product_image: firstItem.image || "", product_image_position: firstItem.imagePosition || "50% 50%" };
     state.orders.unshift(localOrder);
+
+    // تفريغ السلة فور نجاح إرسال الطلب
+    state.cart = [];
+    saveCart();
 
     // 2) إرسال الطلب مباشرة إلى الوسيط للتوصيل — فقط إذا اختار الزبون مدينة/منطقة فعليًا
     let assignedWhatsapp = null;
@@ -1037,7 +1148,7 @@ function openBookingModal(){
       try {
         const { qr_id, qr_link, assigned_username, assigned_whatsapp } = await sendOrderToAlwaseet({
           name, phone, cityId, regionId, location: loc,
-          productLabel: p.name, qty, total: finalTotal,
+          productLabel: productSummary, qty: totalQty, total: finalTotal,
           notes: instagram ? `انستغرام: @${instagram}` : undefined
         });
         localOrder.alwaseet_qr_id = qr_id;
@@ -1066,7 +1177,7 @@ function openBookingModal(){
     // وإلا يُستخدم الرقم العام المشترك من الإعدادات كخطة بديلة
     const num = formatWhatsapp(assignedWhatsapp || state.settings.whatsapp);
     if (num){
-      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتج: ${p.name}${variant.colorName ? `\nاللون: ${variant.colorName}` : ""}${variant.size ? `\nالقياس: ${variant.size}` : ""}\nالكمية: ${qty}\nالسعر الإجمالي: ${finalTotal} د.ع${discount > 0 ? ` (بعد خصم ${discount} د.ع بكود ${appliedCoupon.code})` : ""}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
+      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}\nالسعر الإجمالي: ${finalTotal} د.ع${discount > 0 ? ` (بعد خصم ${discount} د.ع بكود ${appliedCoupon.code})` : ""}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
       if (waWindow) { waWindow.location.href = waUrl; }
       else { window.open(waUrl, "_blank"); } // احتياط لو حظر المتصفح النافذة المفتوحة مسبقًا لأي سبب
@@ -1076,7 +1187,7 @@ function openBookingModal(){
       modalBg.querySelector(".modal").innerHTML = `
         <div class="center" style="padding:6px 0;">
           <div class="seal" style="margin:0 auto 16px;">✓</div>
-          <h2 style="margin-bottom:4px;">تم إرسال حجزك</h2>
+          <h2 style="margin-bottom:4px;">تم إرسال طلبك</h2>
           <p style="font-weight:800;font-size:15px;margin-bottom:10px;">رقم طلبك: ${orderRef(inserted)}</p>
           <p class="hint" style="margin-bottom:22px;">فتحنا لك محادثة واتساب برسالة تحتوي كل تفاصيل طلبك — أرسلها الآن، وانتظر رد المتجر لتأكيد الحجز. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
           <button class="primary-btn" id="closeWaitBtn">تم</button>
@@ -1086,7 +1197,7 @@ function openBookingModal(){
       return;
     }
     if (waWindow) waWindow.close(); // لا يوجد رقم واتساب مُعرَّف أصلًا في الإعدادات، أغلق النافذة الفارغة
-    showToast(`تم إرسال الحجز بنجاح — رقم طلبك: ${orderRef(inserted)}`);
+    showToast(`تم إرسال الطلب بنجاح — رقم طلبك: ${orderRef(inserted)}`);
     closeModal();
     render();
   }
@@ -1862,32 +1973,51 @@ function openPrintWindow(title, bodyHtml){
 function printInvoice(o){
   const invoiceNo = "INV-" + String(o.id).slice(-6).toUpperCase();
   const dateStr = new Date(o.created_at).toLocaleDateString("ar");
+  const itemsRows = Array.isArray(o.cart_items) && o.cart_items.length
+    ? o.cart_items.map(i => {
+        const parts = [];
+        if (i.colorName) parts.push(i.colorName);
+        if (i.size) parts.push(i.size);
+        return `<tr><td>${esc(i.name)}${parts.length ? ` (${esc(parts.join(" · "))})` : ""}</td><td>${esc(i.qty)}</td><td>${money(i.price * i.qty)} د.ع</td></tr>`;
+      }).join("")
+    : `<tr><td>${esc(o.product_name)}</td><td>${esc(o.qty || 1)}</td><td>${o.total ? money(o.total) + " د.ع" : ""}</td></tr>`;
   openPrintWindow("فاتورة " + invoiceNo, `
     <h1>QR CODE</h1>
     <h2>فاتورة رقم ${esc(invoiceNo)} — ${dateStr}</h2>
     <table>
       <tr><td class="label">الزبون</td><td>${esc(o.customer_name)}</td></tr>
       <tr><td class="label">الهاتف</td><td dir="ltr">${esc(o.phone_number || o.phone || "")}</td></tr>
-      <tr><td class="label">المنتج</td><td>${esc(o.product_name)}</td></tr>
-      ${o.qty ? `<tr><td class="label">الكمية</td><td>${esc(o.qty)}</td></tr>` : ""}
       <tr><td class="label">العنوان</td><td>${esc(o.address || o.location || "")}${o.city_name ? " — " + esc(o.city_name) : ""}</td></tr>
     </table>
+    <table style="margin-top:16px;">
+      <tr style="font-weight:700;"><td>المنتج</td><td>الكمية</td><td>السعر</td></tr>
+      ${itemsRows}
+    </table>
+    ${o.coupon_code ? `<div style="font-size:13px;color:#777;margin-top:8px;">كود الخصم المستخدم: ${esc(o.coupon_code)}</div>` : ""}
     <div class="total">الإجمالي: ${o.total ? money(o.total) + " د.ع" : "يُحدَّد لاحقًا"}</div>
     <div class="foot">شكرًا لثقتكم بـ QR CODE</div>
   `);
 }
 
 function printProductionSlip(o){
+  const itemsRows = Array.isArray(o.cart_items) && o.cart_items.length
+    ? o.cart_items.map(i => {
+        const parts = [];
+        if (i.colorName) parts.push(i.colorName);
+        if (i.size) parts.push(i.size);
+        return `<tr><td>${esc(i.name)}${parts.length ? ` (${esc(parts.join(" · "))})` : ""}</td><td>${esc(i.qty)}</td></tr>`;
+      }).join("")
+    : `<tr><td>${esc(o.product_name)}</td><td>${esc(o.qty || 1)}</td></tr>`;
   openPrintWindow("إيصال إنتاج", `
     <h1>إيصال إنتاج داخلي</h1>
     <h2>رقم الطلب: ${esc(String(o.id).slice(-6).toUpperCase())} — ${new Date(o.created_at).toLocaleDateString("ar")}</h2>
     <table>
-      <tr><td class="label">المنتج</td><td>${esc(o.product_name)}</td></tr>
-      ${o.qty ? `<tr><td class="label">الكمية</td><td>${esc(o.qty)}</td></tr>` : ""}
-      ${o.custom_request ? `<tr><td class="label">تفاصيل الطلب</td><td>${esc(o.custom_request)}</td></tr>` : ""}
-      <tr><td class="label">اسم الزبون</td><td>${esc(o.customer_name)}</td></tr>
+      <tr style="font-weight:700;"><td>المنتج</td><td>الكمية</td></tr>
+      ${itemsRows}
     </table>
-    ${o.design_image ? `<div><strong style="font-size:13px;">التصميم المرفق:</strong><br><img class="design" src="${esc(o.design_image)}"></div>` : ""}
+    ${o.custom_request ? `<div style="margin-top:10px;"><strong style="font-size:13px;">تفاصيل الطلب:</strong><br>${esc(o.custom_request)}</div>` : ""}
+    <div style="margin-top:10px;"><strong style="font-size:13px;">اسم الزبون:</strong> ${esc(o.customer_name)}</div>
+    ${o.design_image ? `<div style="margin-top:10px;"><strong style="font-size:13px;">التصميم المرفق:</strong><br><img class="design" src="${esc(o.design_image)}"></div>` : ""}
     <div class="foot">للاستخدام الداخلي فقط — ${esc(state.currentAdmin?.username || "")}</div>
   `);
 }
@@ -2756,6 +2886,7 @@ async function init(){
   try {
     if (!supabaseClient) throw new Error("Supabase client not initialized");
     initTheme();
+    state.cart = loadLocal(KEYS.CART, []);
     // المتجر لا يحتاج جدول الطلبات إطلاقًا — يُجلب فقط عند دخول لوحة الإدارة، لتسريع تحميل المتجر للزبون
     await Promise.all([loadProducts(), loadSettings(), loadReviews()]);
 

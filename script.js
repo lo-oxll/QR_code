@@ -143,6 +143,7 @@ async function sendOrderToAlwaseet({ name, phone, phone2, cityId, regionId, loca
 const DEFAULT_EYEBROW = "طباعة · تطريز · ليزر";
 const DEFAULT_LEDE = "نطبع ونطرّز ونقصّ بالليزر كل ما تحتاجه من تشيرتات وملابس مخصصة، أوشحة التخرج، الباجات التعريفية، الأقلام المطبوعة، وسجاد Tufting بتصميمك الخاص. اختر منتجك واحجزه، وسنتواصل معك لإتمام الطلب.";
 const DEFAULT_CONTACT_LABEL = "تواصل معنا مباشرة عبر:";
+const DEFAULT_POLICIES = "";
 
 // الشعار الافتراضي (عند عدم رفع شعار مخصص من الإعدادات): خلفية شفافة بالوضع النهاري،
 // وصورة كاملة بدون تفريغ بالوضع الليلي، لأن الوحدات السوداء تختفي فوق خلفية غامقة بدون خلفية بيضاء خلفها
@@ -157,11 +158,12 @@ let state = {
   adminTab: "products",
   products: [],
   orders: [],
-  settings: { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "" },
+  settings: { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "", policies: DEFAULT_POLICIES },
   selectedProduct: null,
   selectedVariant: null, // { colorName, size } يُملأ عند الضغط على "احجز الآن" من بطاقة المنتج
   // بيانات المشرف الحالي (owner أو staff) - محفوظة في الذاكرة فقط لهذه الجلسة، لا تُخزَّن على القرص
   currentAdmin: null, // { username, role, passwordHash }
+  newOrdersCount: 0,
   staffList: [],
   orderFilter: "pending", // "pending" (قيد المراجعة، الرئيسي) | "confirmed" | "cancelled"
 };
@@ -242,13 +244,14 @@ async function loadSettings(){
         whatsapp: data.whatsapp || "",
         eyebrow: data.eyebrow || DEFAULT_EYEBROW,
         lede: data.lede || DEFAULT_LEDE,
-        logo: data.logo || ""
+        logo: data.logo || "",
+        policies: data.policies || DEFAULT_POLICIES
       };
       return;
     }
   } catch (e) { console.error("settings load error", e); }
   // fallback محلي إن تعذر الاتصال بالسحابة
-  state.settings = loadLocal(KEYS.SETTINGS, { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "" });
+  state.settings = loadLocal(KEYS.SETTINGS, { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "", policies: DEFAULT_POLICIES });
 }
 
 async function saveWhatsapp(newNumber){
@@ -267,11 +270,12 @@ async function saveWhatsapp(newNumber){
 
 // يحفظ محتوى الواجهة الرئيسية (العنوان الفرعي، النص التعريفي، الشعار) في نفس صف الإعدادات المشترك،
 // بحيث تنعكس أي تعديلات فورًا لكل زوار المتجر على كل الأجهزة
-async function saveSiteContent({ eyebrow, lede, logo }){
+async function saveSiteContent({ eyebrow, lede, logo, policies }){
   const patch = {};
   if (eyebrow !== undefined) patch.eyebrow = eyebrow;
   if (lede !== undefined) patch.lede = lede;
   if (logo !== undefined) patch.logo = logo;
+  if (policies !== undefined) patch.policies = policies;
 
   const { error } = await supabaseClient
     .from('settings')
@@ -389,11 +393,14 @@ function renderStore(){
         ${sizes.map(s => `<button type="button" class="size-chip ${vs.size===s?'active':''}" data-size="${esc(s)}">${esc(s)}</button>`).join("")}
       </div>` : "";
 
+    const outOfStock = (p.stock !== undefined && p.stock !== null) && Number(p.stock) <= 0;
+
     return `
       <div class="card" data-pid="${esc(p.id)}">
         <div class="img" id="imgwrap-${esc(p.id)}">
           ${imgTag}
           ${is3d ? `<span class="rotate-badge" title="اسحب يمينًا أو يسارًا للتدوير">🔄 اسحب للتدوير</span>` : ""}
+          ${outOfStock ? `<span class="model3d-badge" style="background:#e5484d;">نفذت الكمية</span>` : ""}
         </div>
         ${colorRow}
         ${sizeRow}
@@ -404,7 +411,9 @@ function renderStore(){
             ${p.description ? `<p>${esc(p.description)}</p>` : ""}
           </div>
         </div>
-        <button class="book-btn" data-book="${esc(p.id)}">احجز الآن</button>
+        ${outOfStock
+          ? `<button class="book-btn" disabled style="opacity:.5;cursor:not-allowed;">نفذت الكمية</button>`
+          : `<button class="book-btn" data-book="${esc(p.id)}">احجز الآن</button>`}
       </div>
     `;
   }).join("");
@@ -433,6 +442,7 @@ function renderStore(){
         <button class="ghost-btn" id="customOrderBtn" style="margin:16px auto 0;max-width:280px;">🎨 اطلب تصميمك الخاص</button>
       </header>
       ${state.products.length === 0 ? `<div class="empty">لم تتم إضافة أي منتجات بعد.</div>` : `<div class="grid">${items}</div>`}
+      ${state.settings.policies ? `<div class="center" style="padding:24px 0 8px;"><button id="policiesLink" style="background:none;border:0;color:var(--muted);text-decoration:underline;font-family:'Cairo',sans-serif;font-size:13px;cursor:pointer;">السياسات والشروط</button></div>` : ""}
     </div>
     <button class="fab" id="adminFab" title="دخول الإدارة">🔒</button>
   `;
@@ -553,6 +563,23 @@ function renderStore(){
   document.getElementById("customOrderBtn").addEventListener("click", () => {
     openCustomOrderModal();
   });
+  const policiesLink = document.getElementById("policiesLink");
+  if (policiesLink) policiesLink.addEventListener("click", () => openPoliciesModal());
+}
+
+function openPoliciesModal(){
+  modalBg.innerHTML = `
+    <div class="modal">
+      <div class="row">
+        <h2>السياسات والشروط</h2>
+        <button class="close-x" id="closeModal">✕</button>
+      </div>
+      <p style="white-space:pre-wrap;line-height:1.9;font-size:14px;">${esc(state.settings.policies || "")}</p>
+    </div>
+  `;
+  document.getElementById("closeModal").onclick = closeModal;
+  modalBg.onclick = (e) => { if (e.target === modalBg) closeModal(); };
+  modalBg.classList.add("open");
 }
 
 /* ---------- نافذة الحجز ---------- */
@@ -778,6 +805,19 @@ function openBookingModal(){
       showToast("تعذر حفظ الحجز: " + (error.message || "خطأ غير معروف"), "err");
       btn.disabled = false; btn.textContent = "تأكيد الحجز";
       return;
+    }
+
+    // خصم الكمية من المخزون (فقط للمنتجات اللي حدّد لها صاحب المتجر كمية محدودة)
+    if (p.stock !== undefined && p.stock !== null) {
+      const newStock = Math.max(0, Number(p.stock) - qty);
+      try {
+        await supabaseClient.from('products').update({ stock: newStock }).eq('id', p.id);
+        p.stock = newStock;
+        const localP = state.products.find(x => String(x.id) === String(p.id));
+        if (localP) localP.stock = newStock;
+      } catch (e) {
+        console.error("stock update error", e);
+      }
     }
 
     // تحديث فوري للواجهة محليًا (الصورة تُعرض هنا فقط، لأن جدول orders الأصلي لا يخزنها)
@@ -1141,6 +1181,7 @@ function renderAdminLogin(){
         state.view = "admin";
         state.adminTab = data[0].role === "owner" ? "products" : "orders";
         await loadOrders();
+        startOrderPolling();
         render();
       } else {
         document.getElementById("loginErr").textContent = "اسم المستخدم أو كلمة المرور غير صحيحة";
@@ -1159,16 +1200,18 @@ function renderAdmin(){
   const isOwner = state.currentAdmin?.role === "owner";
   const roleLabel = isOwner ? "مدير المتجر" : "مشرف";
 
+  const ordersBadge = state.newOrdersCount > 0 ? `<span class="notif-badge">${state.newOrdersCount}</span>` : "";
   const tabsHtml = isOwner
     ? `
       <button class="tab ${state.adminTab==='products'?'active':''}" data-tab="products">المنتجات</button>
-      <button class="tab ${state.adminTab==='orders'?'active':''}" data-tab="orders">الحجوزات (${state.orders.length})</button>
+      <button class="tab ${state.adminTab==='orders'?'active':''}" data-tab="orders">الحجوزات (${state.orders.length})${ordersBadge}</button>
+      <button class="tab ${state.adminTab==='stats'?'active':''}" data-tab="stats">الإحصائيات</button>
       <button class="tab ${state.adminTab==='settings'?'active':''}" data-tab="settings">الإعدادات</button>
       <button class="tab ${state.adminTab==='admins'?'active':''}" data-tab="admins">المشرفون</button>
       <button class="tab ${state.adminTab==='myAlwaseet'?'active':''}" data-tab="myAlwaseet">حسابي بالوسيط</button>
     `
     : `
-      <button class="tab ${state.adminTab==='orders'?'active':''}" data-tab="orders">الحجوزات (${state.orders.length})</button>
+      <button class="tab ${state.adminTab==='orders'?'active':''}" data-tab="orders">الحجوزات (${state.orders.length})${ordersBadge}</button>
       <button class="tab ${state.adminTab==='products'?'active':''}" data-tab="products">المنتجات</button>
       <button class="tab ${state.adminTab==='myAlwaseet'?'active':''}" data-tab="myAlwaseet">حسابي بالوسيط</button>
     `;
@@ -1184,6 +1227,9 @@ function renderAdmin(){
     </div>
   `;
   document.getElementById("logoutBtn").onclick = () => {
+    stopOrderPolling();
+    state.newOrdersCount = 0;
+    document.title = "QR CODE | طباعة · تطريز · ليزر";
     state.currentAdmin = null;
     state.view = "store";
     render();
@@ -1193,6 +1239,8 @@ function renderAdmin(){
       state.adminTab = btn.dataset.tab;
       render();
       if (state.adminTab === "orders") {
+        state.newOrdersCount = 0;
+        document.title = "QR CODE | طباعة · تطريز · ليزر";
         await loadOrders();
         render();
       }
@@ -1209,6 +1257,7 @@ function renderAdmin(){
     else renderProductsReadOnly(body);
   }
   else if (state.adminTab === "orders") renderOrdersTab(body);
+  else if (state.adminTab === "stats" && isOwner) renderStatsTab(body);
   else if (state.adminTab === "settings" && isOwner) renderSettingsTab(body);
   else if (state.adminTab === "admins" && isOwner) renderAdminsTab(body);
   else if (state.adminTab === "myAlwaseet") renderMyAlwaseetTab(body);
@@ -1252,6 +1301,9 @@ function renderProductsTab(body){
       <input class="plain-input" id="pPrice" placeholder="السعر (د.ع)" inputmode="numeric">
       <div class="err" id="errPPrice" style="margin:-6px 0 10px;"></div>
       <textarea class="plain-textarea" id="pDesc" placeholder="وصف مختصر (اختياري)" rows="2"></textarea>
+
+      <input class="plain-input" id="pStock" placeholder="الكمية المتوفرة (اختياري — اتركه فارغًا لكمية غير محدودة)" inputmode="numeric">
+      <p class="hint" style="margin:-6px 0 16px;">إذا حددت رقمًا، يظهر "نفذت الكمية" تلقائيًا للزبون عند نفادها ويُمنع الحجز.</p>
 
       <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">القياسات المتوفرة (اختياري)</p>
       <div class="size-row" id="sizeBuilder" style="margin-bottom:16px;">
@@ -1442,6 +1494,8 @@ function renderProductsTab(body){
     if (pendingImage) row.image_position = `${pendingPos.x}% ${pendingPos.y}%`;
     if (pendingSizes.size) row.sizes = [...pendingSizes].join(",");
     if (pendingColors.length) row.colors = pendingColors;
+    const stockVal = document.getElementById("pStock").value.trim();
+    if (stockVal !== "" && !isNaN(Number(stockVal))) row.stock = Math.max(0, Math.floor(Number(stockVal)));
 
     const { error } = await supabaseClient.from('products').insert([row]);
 
@@ -1468,14 +1522,46 @@ function renderProductsTab(body){
       const variantBits = [];
       if (colors.length) variantBits.push(`${colors.length} ألوان`);
       if (sizes.length) variantBits.push(sizes.join("/"));
+      if (p.stock !== undefined && p.stock !== null) variantBits.push(`المخزون: ${p.stock}`);
       return `
         <div class="prod-row">
           ${prodImg}
           <div class="info"><h4>${esc(p.name)}</h4><p>${money(p.price)} د.ع${variantBits.length ? " · " + esc(variantBits.join(" · ")) : ""}</p></div>
+          <input type="number" min="0" class="stock-input" data-stockinput="${p.id}" placeholder="الكمية" value="${p.stock !== undefined && p.stock !== null ? p.stock : ''}" style="width:64px;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-family:inherit;font-size:12px;text-align:center;">
+          <button class="del-btn" data-stocksave="${p.id}" title="تحديث المخزون" style="font-size:13px;">💾</button>
           <button class="del-btn" data-del="${p.id}">🗑</button>
         </div>
       `;
     }).join("");
+    list.querySelectorAll("[data-stocksave]").forEach(b => {
+      b.onclick = async () => {
+        const pid = b.dataset.stocksave;
+        const input = list.querySelector(`[data-stockinput="${pid}"]`);
+        const raw = input.value.trim();
+        const newStock = raw === "" ? null : Math.max(0, Math.floor(Number(raw)));
+        if (raw !== "" && isNaN(newStock)) { showToast("أدخل رقمًا صحيحًا", "err"); return; }
+
+        if (!isDbId(pid)) {
+          const localP = state.products.find(x => String(x.id) === String(pid));
+          if (localP) localP.stock = newStock;
+          saveLocal(KEYS.PRODUCTS, state.products);
+          showToast("تم تحديث المخزون (محليًا فقط)");
+          renderAdmin();
+          return;
+        }
+
+        const { error } = await supabaseClient.from('products').update({ stock: newStock }).eq('id', pid);
+        if (error) {
+          console.error("stock update error", error);
+          showToast("تعذر تحديث المخزون: " + (error.message || "خطأ غير معروف"), "err");
+          return;
+        }
+        const p2 = state.products.find(x => String(x.id) === String(pid));
+        if (p2) p2.stock = newStock;
+        showToast("تم تحديث المخزون بنجاح");
+        renderAdmin();
+      };
+    });
     list.querySelectorAll("[data-del]").forEach(b => {
       b.onclick = async () => {
         const confirmDelete = confirm("هل أنت متأكد من حذف هذا المنتج؟");
@@ -1528,6 +1614,130 @@ function alwaseetStatusText(o){
 function reviewStatus(o){ return o.review_status || "pending"; }
 
 /* ---------- تبويب الحجوزات: مقسّم إلى قيد المراجعة (الرئيسي) / مؤكدة / ملغية ---------- */
+/* ======================= طباعة فاتورة العميل وإيصال الإنتاج الداخلي ======================= */
+function openPrintWindow(title, bodyHtml){
+  const win = window.open("", "_blank");
+  if (!win) { showToast("يرجى السماح بالنوافذ المنبثقة لهذا الموقع لتتمكن من الطباعة", "err"); return; }
+  win.document.write(`
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+      <meta charset="UTF-8">
+      <title>${title}</title>
+      <style>
+        body{font-family:'Cairo',Tahoma,sans-serif;padding:28px;color:#111;max-width:520px;margin:0 auto;}
+        h1{font-size:20px;margin:0 0 4px;}
+        h2{font-size:15px;margin:0 0 18px;color:#555;font-weight:600;}
+        table{width:100%;border-collapse:collapse;margin-top:14px;}
+        td{padding:8px 0;border-bottom:1px solid #eee;font-size:14px;vertical-align:top;}
+        td.label{color:#777;width:38%;}
+        .total{font-size:17px;font-weight:800;margin-top:16px;text-align:left;}
+        .foot{margin-top:30px;font-size:12px;color:#999;text-align:center;}
+        img.design{max-width:140px;border-radius:8px;margin-top:6px;}
+        @media print{ .no-print{display:none;} }
+      </style>
+    </head>
+    <body>
+      ${bodyHtml}
+      <button class="no-print" onclick="window.print()" style="margin-top:22px;padding:10px 20px;border-radius:10px;border:2px solid #111;background:none;font-family:inherit;font-size:14px;cursor:pointer;">🖨️ طباعة / حفظ PDF</button>
+    </body>
+    </html>
+  `);
+  win.document.close();
+}
+
+function printInvoice(o){
+  const invoiceNo = "INV-" + String(o.id).slice(-6).toUpperCase();
+  const dateStr = new Date(o.created_at).toLocaleDateString("ar");
+  openPrintWindow("فاتورة " + invoiceNo, `
+    <h1>QR CODE</h1>
+    <h2>فاتورة رقم ${esc(invoiceNo)} — ${dateStr}</h2>
+    <table>
+      <tr><td class="label">الزبون</td><td>${esc(o.customer_name)}</td></tr>
+      <tr><td class="label">الهاتف</td><td dir="ltr">${esc(o.phone_number || o.phone || "")}</td></tr>
+      <tr><td class="label">المنتج</td><td>${esc(o.product_name)}</td></tr>
+      ${o.qty ? `<tr><td class="label">الكمية</td><td>${esc(o.qty)}</td></tr>` : ""}
+      <tr><td class="label">العنوان</td><td>${esc(o.address || o.location || "")}${o.city_name ? " — " + esc(o.city_name) : ""}</td></tr>
+    </table>
+    <div class="total">الإجمالي: ${o.total ? money(o.total) + " د.ع" : "يُحدَّد لاحقًا"}</div>
+    <div class="foot">شكرًا لثقتكم بـ QR CODE</div>
+  `);
+}
+
+function printProductionSlip(o){
+  openPrintWindow("إيصال إنتاج", `
+    <h1>إيصال إنتاج داخلي</h1>
+    <h2>رقم الطلب: ${esc(String(o.id).slice(-6).toUpperCase())} — ${new Date(o.created_at).toLocaleDateString("ar")}</h2>
+    <table>
+      <tr><td class="label">المنتج</td><td>${esc(o.product_name)}</td></tr>
+      ${o.qty ? `<tr><td class="label">الكمية</td><td>${esc(o.qty)}</td></tr>` : ""}
+      ${o.custom_request ? `<tr><td class="label">تفاصيل الطلب</td><td>${esc(o.custom_request)}</td></tr>` : ""}
+      <tr><td class="label">اسم الزبون</td><td>${esc(o.customer_name)}</td></tr>
+    </table>
+    ${o.design_image ? `<div><strong style="font-size:13px;">التصميم المرفق:</strong><br><img class="design" src="${esc(o.design_image)}"></div>` : ""}
+    <div class="foot">للاستخدام الداخلي فقط — ${esc(state.currentAdmin?.username || "")}</div>
+  `);
+}
+
+/* ======================= تبويب الإحصائيات ======================= */
+function renderStatsTab(body){
+  const confirmed = state.orders.filter(o => reviewStatus(o) === "confirmed");
+  const totalRevenue = confirmed.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const avgOrder = confirmed.length ? Math.round(totalRevenue / confirmed.length) : 0;
+
+  const counts = {
+    pending: state.orders.filter(o => reviewStatus(o) === "pending").length,
+    confirmed: confirmed.length,
+    cancelled: state.orders.filter(o => reviewStatus(o) === "cancelled").length,
+  };
+
+  // أكثر المنتجات طلبًا (على الطلبات المؤكدة)
+  const productCounts = {};
+  confirmed.forEach(o => {
+    const name = o.product_name || "غير معروف";
+    productCounts[name] = (productCounts[name] || 0) + (Number(o.qty) || 1);
+  });
+  const topProducts = Object.entries(productCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const maxCount = topProducts.length ? topProducts[0][1] : 1;
+
+  body.innerHTML = `
+    <div class="panel">
+      <h3>نظرة عامة (الطلبات المؤكدة)</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+        <div style="background:var(--card);border-radius:14px;padding:14px;text-align:center;">
+          <div style="font-size:22px;font-weight:800;">${money(totalRevenue)}</div>
+          <div class="hint" style="margin-top:2px;">إجمالي المبيعات (د.ع)</div>
+        </div>
+        <div style="background:var(--card);border-radius:14px;padding:14px;text-align:center;">
+          <div style="font-size:22px;font-weight:800;">${counts.confirmed}</div>
+          <div class="hint" style="margin-top:2px;">عدد الطلبات المؤكدة</div>
+        </div>
+        <div style="background:var(--card);border-radius:14px;padding:14px;text-align:center;">
+          <div style="font-size:22px;font-weight:800;">${money(avgOrder)}</div>
+          <div class="hint" style="margin-top:2px;">متوسط قيمة الطلب (د.ع)</div>
+        </div>
+        <div style="background:var(--card);border-radius:14px;padding:14px;text-align:center;">
+          <div style="font-size:22px;font-weight:800;">${counts.pending}</div>
+          <div class="hint" style="margin-top:2px;">بانتظار المراجعة</div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>الأكثر طلبًا</h3>
+      ${topProducts.length === 0 ? `<p class="hint">لا توجد بيانات كافية بعد.</p>` : topProducts.map(([name, count]) => `
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+            <span>${esc(name)}</span><span style="color:var(--muted);">${count}</span>
+          </div>
+          <div style="background:var(--line);border-radius:999px;height:8px;overflow:hidden;">
+            <div style="background:var(--moss);height:100%;width:${Math.max(6, Math.round((count / maxCount) * 100))}%;"></div>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderOrdersTab(body){
   const isOwner = state.currentAdmin?.role === "owner";
 
@@ -1578,6 +1788,8 @@ function renderOrdersTab(body){
             <button class="btn-whatsapp" data-wacustomer="${o.id}">📱 واتساب العميل</button>
             <button class="btn-instagram" data-instagram="${o.id}" ${o.instagram_username ? '' : 'disabled'}>📷 انستغرام العميل</button>
             <button class="btn-alwaseet" data-sendalwaseet="${o.id}" ${cannotSendToAlwaseet ? 'disabled' : ''}>${o.alwaseet_status === 'sent' ? '✓ أُرسل للوسيط' : '🚚 إرسال إلى الوسيط'}</button>
+            <button class="btn-whatsapp" data-invoice="${o.id}">🧾 فاتورة</button>
+            <button class="btn-whatsapp" data-slip="${o.id}">🖨️ إيصال إنتاج</button>
             ${isOwner ? `<button class="btn-delete" data-delorder="${o.id}">🗑 حذف</button>` : ''}
           </div>
         </div>
@@ -1637,6 +1849,19 @@ function renderOrdersTab(body){
       if (!num) { showToast("لا يوجد رقم واتساب متاح لإرسال هذا الطلب", "err"); return; }
       const msg = `تفاصيل الحجز - QR CODE\nالمنتج: ${o.product_name}\nالعميل: ${o.customer_name}\nالهاتف: ${o.phone_number || o.phone || ""}\nالموقع: ${o.address || o.location || ""}${o.city_name ? ` (${o.city_name}${o.region_name ? " - " + o.region_name : ""})` : ""}\nالإجمالي: ${money(o.total)} د.ع`;
       window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank");
+    };
+  });
+
+  body.querySelectorAll("[data-invoice]").forEach(b => {
+    b.onclick = () => {
+      const o = state.orders.find(x => String(x.id) === String(b.dataset.invoice));
+      if (o) printInvoice(o);
+    };
+  });
+  body.querySelectorAll("[data-slip]").forEach(b => {
+    b.onclick = () => {
+      const o = state.orders.find(x => String(x.id) === String(b.dataset.slip));
+      if (o) printProductionSlip(o);
     };
   });
 
@@ -1760,6 +1985,13 @@ function renderSettingsTab(body){
       <button class="primary-btn" id="saveWa">حفظ</button>
     </div>
     <div class="panel">
+      <h3>السياسات والشروط</h3>
+      <p class="hint">تظهر هذي للزبون عبر رابط "السياسات والشروط" أسفل الصفحة الرئيسية. اكتب فيها سياسة الاستبدال/الإرجاع، مدة التنفيذ، طرق الدفع، أو أي شروط تحب توضحها.</p>
+      <textarea class="plain-textarea" id="policiesInput" rows="6" placeholder="مثال:&#10;- مدة التنفيذ: 3-5 أيام عمل حسب نوع الطلب.&#10;- لا يوجد استبدال للمنتجات المخصصة بعد التنفيذ إلا بوجود عيب صناعة.&#10;- الدفع عند الاستلام.">${esc(state.settings.policies || "")}</textarea>
+      <div class="err" id="policiesErr" style="margin:-6px 0 10px;color:var(--err);font-size:12px;"></div>
+      <button class="primary-btn" id="savePolicies">حفظ السياسات</button>
+    </div>
+    <div class="panel">
       <h3>تغيير كلمة مرور مدير المتجر</h3>
       <input class="plain-input" id="oldPw" type="password" placeholder="كلمة المرور الحالية">
       <input class="plain-input" id="newPw" type="password" placeholder="كلمة المرور الجديدة">
@@ -1775,6 +2007,23 @@ function renderSettingsTab(body){
     if (!file) return;
     pendingLogo = await resizeImage(file, 300, 0.85);
     document.getElementById("logoUpload").innerHTML = `<img src="${pendingLogo}" alt="الشعار الجديد">`;
+  };
+
+  document.getElementById("savePolicies").onclick = async () => {
+    const policies = document.getElementById("policiesInput").value.trim();
+    const errEl = document.getElementById("policiesErr");
+    errEl.textContent = "";
+    const btn = document.getElementById("savePolicies");
+    btn.disabled = true; btn.textContent = "جارِ الحفظ...";
+    try {
+      const ok = await saveSiteContent({ policies });
+      if (ok) showToast("تم حفظ السياسات بنجاح");
+      else showToast("تعذر الحفظ في السحابة، تم الحفظ محليًا فقط", "err");
+    } catch (e) {
+      console.error("save policies error", e);
+      errEl.textContent = "تعذر الحفظ";
+    }
+    btn.disabled = false; btn.textContent = "حفظ السياسات";
   };
 
   document.getElementById("saveContent").onclick = async () => {
@@ -2059,6 +2308,45 @@ async function loadOrders(){
     console.error("Supabase orders load error, falling back to local:", e);
     state.orders = loadLocal(KEYS.ORDERS, []);
   }
+}
+
+/* ======================= تنبيه فوري بالطلبات الجديدة أثناء وجود المشرف بلوحة الإدارة ======================= */
+let orderPollTimer = null;
+
+function stopOrderPolling(){
+  if (orderPollTimer) { clearInterval(orderPollTimer); orderPollTimer = null; }
+}
+
+function playNotifySound(){
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880;
+    g.gain.setValueAtTime(0.15, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    o.start();
+    o.stop(ctx.currentTime + 0.4);
+  } catch (e) { /* المتصفح قد يمنع الصوت التلقائي، لا مشكلة */ }
+}
+
+function startOrderPolling(){
+  stopOrderPolling();
+  orderPollTimer = setInterval(async () => {
+    if (state.view !== "admin") { stopOrderPolling(); return; }
+    const knownIds = new Set(state.orders.map(o => String(o.id)));
+    await loadOrders();
+    const newOnes = state.orders.filter(o => !knownIds.has(String(o.id)));
+    if (newOnes.length > 0) {
+      if (state.adminTab !== "orders") {
+        state.newOrdersCount += newOnes.length;
+        document.title = `🔴(${state.newOrdersCount}) لوحة QR CODE`;
+        playNotifySound();
+      }
+      render();
+    }
+  }, 30000);
 }
 
 /* ======================= بدء التشغيل ======================= */

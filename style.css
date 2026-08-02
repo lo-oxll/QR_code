@@ -12,6 +12,7 @@
   --silver:#C7CCD3; --silver-dark:#9AA1AB;
   --btn-border:#FFFFFF; /* إطار أبيض بارز على الأزرار في الوضع الليلي */
 }
+html{touch-action:pan-x pan-y;} /* يمنع التكبير بإيماءة البينش مع إبقاء التمرير العادي شغالاً */
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Cairo',sans-serif;-webkit-font-smoothing:antialiased;transition:background .25s ease, color .25s ease;}
 .display{font-family:'Poppins','Cairo',sans-serif;font-weight:800;letter-spacing:.03em;}

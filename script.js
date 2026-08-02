@@ -959,6 +959,7 @@ function openCartCheckoutModal(){
           <button class="close-x" id="closeModal">✕</button>
         </div>
         <div style="margin-bottom:14px;">${itemsHtml}</div>
+        <input id="fWebsite" type="text" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true">
         <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
         ${citiesFailed ? "" : `
         <div class="field"><div class="box">🏙️<select id="fCity" style="width:100%;background:transparent;border:0;outline:0;font-family:'Cairo',sans-serif;font-size:14px;">
@@ -1078,6 +1079,7 @@ function openCartCheckoutModal(){
   })();
 
   async function submit(){
+    if (document.getElementById("fWebsite")?.value) return;
     if (state.cart.length === 0) { showToast("السلة فارغة", "err"); return; }
     const name = vals.name.trim();
     const loc = vals.loc.trim();
@@ -1199,19 +1201,25 @@ function openCartCheckoutModal(){
         localOrder.assigned_staff_username = assigned_username;
         localOrder.assigned_staff_whatsapp = assigned_whatsapp;
         assignedWhatsapp = assigned_whatsapp;
-        await supabaseClient.from('orders').update({
-          alwaseet_qr_id: qr_id, alwaseet_qr_link: qr_link, alwaseet_status: 'sent',
-          assigned_staff_username: assigned_username, assigned_staff_whatsapp: assigned_whatsapp
-        }).eq('id', inserted.id);
+        await supabaseClient.rpc('update_order_alwaseet_public', {
+          p_order_id: inserted.id,
+          p_alwaseet_status: 'sent',
+          p_alwaseet_qr_id: qr_id,
+          p_alwaseet_qr_link: qr_link,
+          p_assigned_staff_username: assigned_username,
+          p_assigned_staff_whatsapp: assigned_whatsapp
+        });
       } catch (err) {
         // الحجز يبقى ناجحًا للزبون دائمًا حتى لو فشل الإرسال للوسيط —
         // يمكن للمشرف إعادة المحاولة يدويًا من لوحة الإدارة
         console.error("alwaseet create-order error", err);
         localOrder.alwaseet_status = 'failed';
         localOrder.alwaseet_error = err.message || "خطأ غير معروف";
-        await supabaseClient.from('orders').update({
-          alwaseet_status: 'failed', alwaseet_error: localOrder.alwaseet_error
-        }).eq('id', inserted.id);
+        await supabaseClient.rpc('update_order_alwaseet_public', {
+          p_order_id: inserted.id,
+          p_alwaseet_status: 'failed',
+          p_alwaseet_error: localOrder.alwaseet_error
+        });
       }
     }
 
@@ -1283,6 +1291,7 @@ function openCustomOrderModal(){
           </div>
         ` : `<label class="ghost-btn" id="designLabel" style="display:block;text-align:center;cursor:pointer;margin-bottom:14px;">🎨 إرفاق صورة</label>`}
 
+        <input id="fWebsite" type="text" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true">
         <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
         ${citiesFailed ? "" : `
         <div class="field"><div class="box">🏙️<select id="fCity" style="width:100%;background:transparent;border:0;outline:0;font-family:'Cairo',sans-serif;font-size:14px;">
@@ -1394,6 +1403,7 @@ function openCustomOrderModal(){
   })();
 
   async function submit(){
+    if (document.getElementById("fWebsite")?.value) return;
     const name = vals.name.trim();
     const loc = vals.loc.trim();
     const phone = vals.phone.trim();
@@ -2376,7 +2386,12 @@ function renderOrdersTab(body){
     if (!order) return;
 
     if (isDbId(orderId)) {
-      const { error } = await supabaseClient.from('orders').update({ review_status: status }).eq('id', orderId);
+      const { error } = await supabaseClient.rpc('update_order_secure', {
+        p_username: state.currentAdmin.username,
+        p_password_hash: state.currentAdmin.passwordHash,
+        p_order_id: orderId,
+        p_fields: { review_status: status }
+      });
       if (error) {
         console.error("update review_status error", error);
         showToast("تعذر تحديث حالة الطلب: " + (error.message || "خطأ غير معروف"), "err");
@@ -2464,9 +2479,12 @@ function renderOrdersTab(body){
         });
         order.alwaseet_qr_id = qr_id; order.alwaseet_qr_link = qr_link; order.alwaseet_status = 'sent';
         if (isDbId(order.id)) {
-          await supabaseClient.from('orders').update({
-            alwaseet_qr_id: qr_id, alwaseet_qr_link: qr_link, alwaseet_status: 'sent', alwaseet_error: null
-          }).eq('id', order.id);
+          await supabaseClient.rpc('update_order_secure', {
+            p_username: state.currentAdmin.username,
+            p_password_hash: state.currentAdmin.passwordHash,
+            p_order_id: order.id,
+            p_fields: { alwaseet_qr_id: qr_id, alwaseet_qr_link: qr_link, alwaseet_status: 'sent', alwaseet_error: null }
+          });
         } else {
           saveLocal(KEYS.ORDERS, state.orders);
         }
@@ -2477,7 +2495,12 @@ function renderOrdersTab(body){
         order.alwaseet_error = err.message || "خطأ غير معروف";
         order.alwaseet_status = 'failed';
         if (isDbId(order.id)) {
-          await supabaseClient.from('orders').update({ alwaseet_status: 'failed', alwaseet_error: order.alwaseet_error }).eq('id', order.id);
+          await supabaseClient.rpc('update_order_secure', {
+            p_username: state.currentAdmin.username,
+            p_password_hash: state.currentAdmin.passwordHash,
+            p_order_id: order.id,
+            p_fields: { alwaseet_status: 'failed', alwaseet_error: order.alwaseet_error }
+          });
         } else {
           saveLocal(KEYS.ORDERS, state.orders);
         }
@@ -2503,7 +2526,11 @@ function renderOrdersTab(body){
           return;
         }
 
-        const { error } = await supabaseClient.from('orders').delete().eq('id', oid);
+        const { error } = await supabaseClient.rpc('delete_order_secure', {
+          p_username: state.currentAdmin.username,
+          p_password_hash: state.currentAdmin.passwordHash,
+          p_order_id: oid
+        });
         if (error) {
           console.error("delete order error", error);
           showToast("تعذر حذف الطلب: " + (error.message || "خطأ غير معروف"), "err");
@@ -2935,10 +2962,12 @@ async function logActivity(action, orderRefStr){
 
 async function loadOrders(){
   try {
+    if (!state.currentAdmin) { state.orders = []; return; }
     const { data: dbOrders, error: ordErr } = await supabaseClient
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .rpc('get_orders_secure', {
+        p_username: state.currentAdmin.username,
+        p_password_hash: state.currentAdmin.passwordHash
+      });
 
     if (!ordErr && dbOrders) {
       state.orders = dbOrders;

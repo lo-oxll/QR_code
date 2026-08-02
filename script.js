@@ -919,11 +919,16 @@ function openCustomOrderModal(){
     document.getElementById("fDesign").onchange = async (e) => {
       const f = e.target.files[0];
       if (!f) return;
+      // معاينة فورية أثناء الرفع
+      vals.designImage = URL.createObjectURL(f);
+      paint();
       try {
-        vals.designImage = await resizeImage(f, 900, 0.8);
+        const blob = await resizeImageToBlob(f, 900, 0.8);
+        vals.designImage = await uploadImageToStorage(blob, "designs");
       } catch (err) {
-        console.error("design image resize error", err);
-        showToast("تعذر تحميل الصورة", "err");
+        console.error("design image upload error", err);
+        showToast("تعذر رفع الصورة", "err");
+        vals.designImage = null;
       }
       paint();
     };
@@ -1057,7 +1062,7 @@ function openCustomOrderModal(){
     // يحدَّد السعر أولًا عبر التواصل، وبعدها يرسلها المشرف يدويًا من لوحة الإدارة
     const num = formatWhatsapp(state.settings.whatsapp);
     if (num){
-      const msg = `طلب مخصص جديد من QR CODE\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}${vals.designImage ? "\n🎨 تم إرفاق تصميم/صورة مرجعية — راجع لوحة الإدارة لعرضها" : ""}`;
+      const msg = `طلب مخصص جديد من QR CODE\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}${vals.designImage ? `\n🎨 صورة التصميم/المرجع: ${vals.designImage}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
       if (waWindow) { waWindow.location.href = waUrl; }
       else { window.open(waUrl, "_blank"); }

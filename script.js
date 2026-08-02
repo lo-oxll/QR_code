@@ -60,8 +60,10 @@ function isDbId(id){
 const THEME_KEY = "qissa:theme";
 function applyTheme(theme){
   document.documentElement.setAttribute("data-theme", theme);
-  const btn = document.getElementById("themeToggle");
-  if (btn) btn.textContent = theme === "dark" ? "☀️" : "🌙";
+  // موضع الكرة داخل المفتاح يتغيّر تلقائيًا عبر CSS ([data-theme="dark"] .switch-thumb)،
+  // هنا فقط نبدّل الأيقونة الظاهرة داخل الكرة
+  const thumb = document.getElementById("themeThumb");
+  if (thumb) thumb.textContent = theme === "dark" ? "☀️" : "🌙";
   // إن كان المتجر يستخدم الشعار الافتراضي (لا يوجد شعار مخصص محفوظ بالإعدادات)، نبدّل الصورة فورًا مع تبديل الوضع
   const logoEl = document.querySelector(".logo-img");
   if (logoEl && !state.settings.logo) logoEl.src = defaultLogoSrc();
@@ -75,6 +77,34 @@ function initTheme(){
     saveLocal(THEME_KEY, next);
     applyTheme(next);
   };
+}
+
+/* ======================= زر السلة العلوي (ثابت خارج دورة الرندر) ======================= */
+// نربطه مرة واحدة هنا بدل إعادة ربطه بكل render() لتفادي تكرار المستمعين
+function initTopCart(){
+  const btn = document.getElementById("cartFab");
+  if (btn) btn.addEventListener("click", () => openCartModal());
+}
+
+/* ======================= إظهار تسجيل دخول الإدارة بالنقر على عنوان المتجر 3 مرات ======================= */
+// لا يوجد أي زر ظاهر لدخول الإدارة في الواجهة إطلاقًا.
+// النقر على عنوان "QR CODE STORE" 3 مرات متتالية خلال ثانية ونصف يفتح مباشرة نموذج تسجيل الدخول.
+// تعمل بالفأرة وباللمس معًا (لأنها click عادي، وليست إيماءة لمس خاصة).
+// تنبيه: هذه تعمية (obscurity) وليست حماية حقيقية — الحماية الفعلية بكلمة المرور بالخادم.
+let titleClickTimes = [];
+function handleTitleClickForAdmin(){
+  const REQUIRED_CLICKS = 3;
+  const MAX_GAP_MS = 1500; // أقصى فارق زمني بين أول نقرة وآخر نقرة بالسلسلة
+  const now = Date.now();
+  titleClickTimes = titleClickTimes.filter(t => now - t <= MAX_GAP_MS);
+  titleClickTimes.push(now);
+  if (titleClickTimes.length >= REQUIRED_CLICKS) {
+    titleClickTimes = [];
+    if (state.view !== "admin" && state.view !== "adminLogin") {
+      state.view = "adminLogin";
+      render();
+    }
+  }
 }
 
 /* ======================= الربط مع شركة الوسيط للتوصيل ======================= */
@@ -461,7 +491,7 @@ function renderStore(){
     <div class="wrap">
       <header class="hero">
         <div class="brand-row">
-          <h1 class="brand display">QR CODE STORE</h1>
+          <h1 class="brand display" id="storeTitle">QR CODE STORE</h1>
           <img src="${esc(state.settings.logo || defaultLogoSrc())}" alt="شعار QR CODE" class="logo-img">
         </div>
         <span class="eyebrow">${esc(state.settings.eyebrow || DEFAULT_EYEBROW)}</span>
@@ -501,11 +531,15 @@ function renderStore(){
         ${state.settings.policies ? `<button id="policiesLink" style="background:none;border:0;color:var(--muted);text-decoration:underline;font-family:'Cairo',sans-serif;font-size:13px;cursor:pointer;">السياسات والشروط</button>` : ""}
       </div>
     </div>
-    <button class="fab" id="adminFab" title="دخول الإدارة">🔒</button>
-    <button class="fab" id="cartFab" title="السلة" style="left:auto;right:20px;">
-      🛒${cartCount() > 0 ? `<span class="notif-badge" id="cartBadge" style="top:-4px;left:-4px;">${cartCount()}</span>` : ""}
-    </button>
   `;
+  // السلة ثابتة بالشريط العلوي خارج #app — نظهرها فقط في واجهة المتجر ونحدّث شارتها
+  const topCartBtn = document.getElementById("cartFab");
+  if (topCartBtn) topCartBtn.style.display = "flex";
+  updateCartBadge();
+
+  // النقر 3 مرات على عنوان المتجر يفتح تسجيل دخول الإدارة (بدون أي زر ظاهر)
+  const titleEl = document.getElementById("storeTitle");
+  if (titleEl) titleEl.addEventListener("click", handleTitleClickForAdmin);
 
   // --- تفاعل الألوان: النقر على أي لون يبدّل صورة البطاقة فورًا دون إعادة رسم الصفحة كاملة ---
   app.querySelectorAll("[data-colors]").forEach(row => {
@@ -613,11 +647,6 @@ function renderStore(){
       updateCartBadge();
     });
   });
-  document.getElementById("adminFab").addEventListener("click", () => {
-    state.view = "adminLogin";
-    render();
-  });
-  document.getElementById("cartFab").addEventListener("click", () => openCartModal());
   document.getElementById("customOrderBtn").addEventListener("click", () => {
     openCustomOrderModal();
   });
@@ -1455,6 +1484,8 @@ function closeModal(){
 
 /* ---------- تسجيل دخول الأدمن (يوزر + رمز، عبر Supabase) ---------- */
 function renderAdminLogin(){
+  const topCartBtn = document.getElementById("cartFab");
+  if (topCartBtn) topCartBtn.style.display = "none";
   app.innerHTML = `
     <div class="login-wrap">
       <div class="login-card">
@@ -1517,6 +1548,8 @@ function renderAdminLogin(){
 
 /* ---------- لوحة الإدارة ---------- */
 function renderAdmin(){
+  const topCartBtn = document.getElementById("cartFab");
+  if (topCartBtn) topCartBtn.style.display = "none";
   const isOwner = state.currentAdmin?.role === "owner";
   const roleLabel = isOwner ? "مدير المتجر" : "مشرف";
 
@@ -2886,6 +2919,7 @@ async function init(){
   try {
     if (!supabaseClient) throw new Error("Supabase client not initialized");
     initTheme();
+    initTopCart();
     state.cart = loadLocal(KEYS.CART, []);
     // المتجر لا يحتاج جدول الطلبات إطلاقًا — يُجلب فقط عند دخول لوحة الإدارة، لتسريع تحميل المتجر للزبون
     await Promise.all([loadProducts(), loadSettings(), loadReviews()]);

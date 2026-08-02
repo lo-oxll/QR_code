@@ -68,7 +68,15 @@
 
 <div id="modalBg" class="modal-bg"></div>
 <div id="toastHost"></div>
-<button id="themeToggle" class="theme-toggle" title="الوضع الليلي/النهاري">🌙</button>
+
+<!-- شريط علوي ثابت: مفتاح الوضع الليلي/النهاري + زر السلة بجانبه.
+     زر قفل الإدارة غير موجود هنا إطلاقًا — يظهر فقط عبر إيماءة سرية (انظر initAdminGesture في script.js) -->
+<div class="top-bar" id="topBar">
+  <button id="themeToggle" class="switch" title="الوضع الليلي/النهاري" aria-label="تبديل الوضع الليلي والنهاري">
+    <span class="switch-thumb" id="themeThumb">🌙</span>
+  </button>
+  <button id="cartFab" class="cart-top-btn" title="السلة" style="display:none;">🛒</button>
+</div>
 
 <script src="script.js"></script>
 </body>

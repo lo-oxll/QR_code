@@ -11,7 +11,7 @@ try {
   if (typeof showStoreLoadError === "function") showStoreLoadError();
 }
 
-const KEYS = { PRODUCTS: "qissa:products", ORDERS: "qissa:orders", SETTINGS: "qissa:settings", CART: "qissa:cart" };
+const KEYS = { PRODUCTS: "qrcode:products", ORDERS: "qrcode:orders", SETTINGS: "qrcode:settings", CART: "qrcode:cart" };
 const DEFAULT_PW_HASH = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4";
 
 function loadLocal(key, fallback) {
@@ -57,7 +57,7 @@ function isDbId(id){
 /* ======================= الوضع الليلي/النهاري ======================= */
 // هذا التفضيل يُحفظ في localStorage الخاص بمتصفح هذا الجهاز فقط،
 // لذلك تفعيله لا يغيّر أي شيء عند أي مستخدم آخر يفتح الموقع من جهازه الخاص
-const THEME_KEY = "qissa:theme";
+const THEME_KEY = "qrcode:theme";
 function applyTheme(theme){
   document.documentElement.setAttribute("data-theme", theme);
   // موضع الكرة داخل المفتاح يتغيّر تلقائيًا عبر CSS ([data-theme="dark"] .switch-thumb)،
@@ -2984,15 +2984,14 @@ async function loadOrders(){
   try {
     if (!state.currentAdmin) { state.orders = []; return; }
     const { data: dbOrders, error: ordErr } = await supabaseClient
-      .rpc('get_orders_secure', {
-        p_username: state.currentAdmin.username,
-        p_password_hash: state.currentAdmin.passwordHash
-      });
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false });
 
     if (!ordErr && dbOrders) {
       state.orders = dbOrders;
     } else {
-      console.error("get_orders_secure error:", ordErr);
+      console.error("orders fetch error:", ordErr);
       showToast("تعذر تحديث الطلبات من الخادم: " + (ordErr?.message || "خطأ غير معروف"), "err");
       state.orders = loadLocal(KEYS.ORDERS, []);
     }

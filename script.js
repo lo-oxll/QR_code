@@ -929,14 +929,9 @@ function openCartCheckoutModal(){
   // القيم تُحفظ هنا وتُعاد تعبئتها في كل إعادة رسم، لأن paint() يعيد بناء الـ HTML من الصفر
   // في كل مرة (عند تغيير المدينة مثلًا)، وبدون هذا كانت قيم الحقول تُمسح بالكامل.
   const vals = { name: "", loc: "", phone: "", instagram: "", cityId: "", cityName: "", regionId: "", regionName: "" };
-  let appliedCoupon = null; // { code, discount_type, discount_value }
 
   function paint(){
     const total = cartSubtotal();
-    const discount = appliedCoupon
-      ? Math.min(total, appliedCoupon.discount_type === 'percent' ? Math.round(total * appliedCoupon.discount_value / 100) : appliedCoupon.discount_value)
-      : 0;
-    const finalTotal = total - discount;
     const itemsHtml = state.cart.map(i => {
       const variantParts = [];
       if (i.colorName) variantParts.push(i.colorName);
@@ -977,9 +972,7 @@ function openCartCheckoutModal(){
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
         <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام" value="${esc(vals.instagram)}" dir="ltr"></div><div class="err" id="errInsta"></div></div>
 
-        ${discount > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:2px;"><span>السعر قبل الخصم</span><span>${money(total)} د.ع</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--moss);margin-bottom:6px;"><span>الخصم</span><span>-${money(discount)} د.ع</span></div>` : ""}
-        <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(finalTotal)} د.ع</span></div>
+        <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(total)} د.ع</span></div>
         <button class="primary-btn" id="submitOrder">تأكيد الطلب</button>
       </div>
     `;
@@ -992,9 +985,6 @@ function openCartCheckoutModal(){
     document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
     document.getElementById("fInsta").oninput = (e) => vals.instagram = e.target.value;
     renderStreetChips();
-
-    // ملاحظة: تم إزالة واجهة كود الخصم بالكامل من صفحة الدفع بناءً على طلب صاحب المتجر.
-    // appliedCoupon يبقى null دائمًا الآن، لذا الخصم = 0 والإجمالي = السعر الكامل دومًا.
 
     if (!citiesFailed) {
       document.getElementById("fCity").onchange = async (e) => {
@@ -1112,10 +1102,6 @@ function openCartCheckoutModal(){
       colorName: i.colorName, size: i.size
     }));
     const total = cartSubtotal();
-    const discount = appliedCoupon
-      ? Math.min(total, appliedCoupon.discount_type === 'percent' ? Math.round(total * appliedCoupon.discount_value / 100) : appliedCoupon.discount_value)
-      : 0;
-    const finalTotal = total - discount;
     const totalQty = state.cart.reduce((s, i) => s + i.qty, 0);
     const productSummary = state.cart.map(i => {
       const parts = [];
@@ -1143,8 +1129,7 @@ function openCartCheckoutModal(){
           region_name: regionName || null,
           instagram_username: instagram || null,
           qty: totalQty,
-          total: finalTotal,
-          coupon_code: appliedCoupon ? appliedCoupon.code : null,
+          total,
           alwaseet_status: 'pending'
         }
       ])
@@ -1187,7 +1172,7 @@ function openCartCheckoutModal(){
       try {
         const { qr_id, qr_link, assigned_username, assigned_whatsapp } = await sendOrderToAlwaseet({
           name, phone, cityId, regionId, location: loc,
-          productLabel: productSummary, qty: totalQty, total: finalTotal,
+          productLabel: productSummary, qty: totalQty, total,
           notes: instagram ? `انستغرام: @${instagram}` : undefined
         });
         localOrder.alwaseet_qr_id = qr_id;
@@ -1222,7 +1207,7 @@ function openCartCheckoutModal(){
     // وإلا يُستخدم الرقم العام المشترك من الإعدادات كخطة بديلة
     const num = formatWhatsapp(assignedWhatsapp || state.settings.whatsapp);
     if (num){
-      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}\nالسعر الإجمالي: ${finalTotal} د.ع${discount > 0 ? ` (بعد خصم ${discount} د.ع بكود ${appliedCoupon.code})` : ""}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
+      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 
       // نعرض رسالة النجاح أولًا داخل المودال، وفقط عند ضغط الزبون على "تم" نفتح واتساب —

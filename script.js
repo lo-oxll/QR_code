@@ -144,6 +144,7 @@ const DEFAULT_EYEBROW = "طباعة · تطريز · ليزر";
 const DEFAULT_LEDE = "نطبع ونطرّز ونقصّ بالليزر كل ما تحتاجه من تشيرتات وملابس مخصصة، أوشحة التخرج، الباجات التعريفية، الأقلام المطبوعة، وسجاد Tufting بتصميمك الخاص. اختر منتجك واحجزه، وسنتواصل معك لإتمام الطلب.";
 const DEFAULT_CONTACT_LABEL = "تواصل معنا مباشرة عبر:";
 const DEFAULT_POLICIES = "";
+const DEFAULT_ABOUT = "";
 
 // الشعار الافتراضي (عند عدم رفع شعار مخصص من الإعدادات): خلفية شفافة بالوضع النهاري،
 // وصورة كاملة بدون تفريغ بالوضع الليلي، لأن الوحدات السوداء تختفي فوق خلفية غامقة بدون خلفية بيضاء خلفها
@@ -158,7 +159,8 @@ let state = {
   adminTab: "products",
   products: [],
   orders: [],
-  settings: { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "", policies: DEFAULT_POLICIES },
+  reviews: [],
+  settings: { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "", policies: DEFAULT_POLICIES, aboutUs: DEFAULT_ABOUT },
   selectedProduct: null,
   selectedVariant: null, // { colorName, size } يُملأ عند الضغط على "احجز الآن" من بطاقة المنتج
   // بيانات المشرف الحالي (owner أو staff) - محفوظة في الذاكرة فقط لهذه الجلسة، لا تُخزَّن على القرص
@@ -174,6 +176,7 @@ const modalBg = document.getElementById("modalBg");
 
 function esc(s){ return (s ?? "").toString().replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function money(n){ return Number(n||0).toLocaleString("ar"); }
+function orderRef(o){ return "#" + String(o.id).slice(-6).toUpperCase(); }
 
 // يحوّل حقل sizes النصي (مثل "S,M,L") إلى مصفوفة قياسات نظيفة، ويتجاهله بأمان إن كان غير معرّف أصلًا
 function parseSizes(p){
@@ -245,13 +248,14 @@ async function loadSettings(){
         eyebrow: data.eyebrow || DEFAULT_EYEBROW,
         lede: data.lede || DEFAULT_LEDE,
         logo: data.logo || "",
-        policies: data.policies || DEFAULT_POLICIES
+        policies: data.policies || DEFAULT_POLICIES,
+        aboutUs: data.about_us || DEFAULT_ABOUT
       };
       return;
     }
   } catch (e) { console.error("settings load error", e); }
   // fallback محلي إن تعذر الاتصال بالسحابة
-  state.settings = loadLocal(KEYS.SETTINGS, { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "", policies: DEFAULT_POLICIES });
+  state.settings = loadLocal(KEYS.SETTINGS, { whatsapp: "", eyebrow: DEFAULT_EYEBROW, lede: DEFAULT_LEDE, logo: "", policies: DEFAULT_POLICIES, aboutUs: DEFAULT_ABOUT });
 }
 
 async function saveWhatsapp(newNumber){
@@ -270,12 +274,13 @@ async function saveWhatsapp(newNumber){
 
 // يحفظ محتوى الواجهة الرئيسية (العنوان الفرعي، النص التعريفي، الشعار) في نفس صف الإعدادات المشترك،
 // بحيث تنعكس أي تعديلات فورًا لكل زوار المتجر على كل الأجهزة
-async function saveSiteContent({ eyebrow, lede, logo, policies }){
+async function saveSiteContent({ eyebrow, lede, logo, policies, aboutUs }){
   const patch = {};
   if (eyebrow !== undefined) patch.eyebrow = eyebrow;
   if (lede !== undefined) patch.lede = lede;
   if (logo !== undefined) patch.logo = logo;
   if (policies !== undefined) patch.policies = policies;
+  if (aboutUs !== undefined) patch.about_us = aboutUs;
 
   const { error } = await supabaseClient
     .from('settings')
@@ -284,10 +289,14 @@ async function saveSiteContent({ eyebrow, lede, logo, policies }){
 
   if (error) {
     console.error("site content save error", error);
-    saveLocal(KEYS.SETTINGS, { ...state.settings, ...patch }); // احتياط محلي فقط
+    const localPatch = { eyebrow, lede, logo, policies, aboutUs };
+    Object.keys(localPatch).forEach(k => localPatch[k] === undefined && delete localPatch[k]);
+    saveLocal(KEYS.SETTINGS, { ...state.settings, ...localPatch }); // احتياط محلي فقط
     return false;
   }
-  state.settings = { ...state.settings, ...patch };
+  const localPatch = { eyebrow, lede, logo, policies, aboutUs };
+  Object.keys(localPatch).forEach(k => localPatch[k] === undefined && delete localPatch[k]);
+  state.settings = { ...state.settings, ...localPatch };
   return true;
 }
 
@@ -442,7 +451,25 @@ function renderStore(){
         <button class="ghost-btn" id="customOrderBtn" style="margin:16px auto 0;max-width:280px;">🎨 اطلب تصميمك الخاص</button>
       </header>
       ${state.products.length === 0 ? `<div class="empty">لم تتم إضافة أي منتجات بعد.</div>` : `<div class="grid">${items}</div>`}
-      ${state.settings.policies ? `<div class="center" style="padding:24px 0 8px;"><button id="policiesLink" style="background:none;border:0;color:var(--muted);text-decoration:underline;font-family:'Cairo',sans-serif;font-size:13px;cursor:pointer;">السياسات والشروط</button></div>` : ""}
+      ${state.reviews.length > 0 ? `
+        <div style="margin-top:36px;">
+          <h2 class="display" style="font-size:20px;text-align:center;margin-bottom:16px;">آراء عملائنا</h2>
+          <div class="grid">
+            ${state.reviews.map(r => `
+              <div style="background:var(--card);border-radius:16px;padding:16px;">
+                <div style="font-size:16px;color:#f5a623;">${"⭐".repeat(r.customer_rating)}${"☆".repeat(5 - r.customer_rating)}</div>
+                ${r.customer_review ? `<p style="font-size:13px;margin:8px 0 0;">${esc(r.customer_review)}</p>` : ""}
+                <div class="hint" style="margin-top:8px;">${esc(r.product_name || "")}</div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      ` : ""}
+      <div class="center" style="padding:24px 0 8px;display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
+        <button id="trackOrderLink" style="background:none;border:0;color:var(--muted);text-decoration:underline;font-family:'Cairo',sans-serif;font-size:13px;cursor:pointer;">تتبع طلبك</button>
+        ${state.settings.aboutUs ? `<button id="aboutLink" style="background:none;border:0;color:var(--muted);text-decoration:underline;font-family:'Cairo',sans-serif;font-size:13px;cursor:pointer;">من نحن</button>` : ""}
+        ${state.settings.policies ? `<button id="policiesLink" style="background:none;border:0;color:var(--muted);text-decoration:underline;font-family:'Cairo',sans-serif;font-size:13px;cursor:pointer;">السياسات والشروط</button>` : ""}
+      </div>
     </div>
     <button class="fab" id="adminFab" title="دخول الإدارة">🔒</button>
   `;
@@ -563,8 +590,135 @@ function renderStore(){
   document.getElementById("customOrderBtn").addEventListener("click", () => {
     openCustomOrderModal();
   });
+  document.getElementById("trackOrderLink").addEventListener("click", () => openTrackOrderModal());
+  const aboutLink = document.getElementById("aboutLink");
+  if (aboutLink) aboutLink.addEventListener("click", () => openAboutModal());
   const policiesLink = document.getElementById("policiesLink");
   if (policiesLink) policiesLink.addEventListener("click", () => openPoliciesModal());
+}
+
+function openAboutModal(){
+  modalBg.innerHTML = `
+    <div class="modal">
+      <div class="row">
+        <h2>من نحن</h2>
+        <button class="close-x" id="closeModal">✕</button>
+      </div>
+      <p style="white-space:pre-wrap;line-height:1.9;font-size:14px;">${esc(state.settings.aboutUs || "")}</p>
+    </div>
+  `;
+  document.getElementById("closeModal").onclick = closeModal;
+  modalBg.onclick = (e) => { if (e.target === modalBg) closeModal(); };
+  modalBg.classList.add("open");
+}
+
+function openTrackOrderModal(){
+  modalBg.innerHTML = `
+    <div class="modal">
+      <div class="row">
+        <h2>تتبع طلبك</h2>
+        <button class="close-x" id="closeModal">✕</button>
+      </div>
+      <p class="hint" style="margin:-6px 0 14px;">أدخل رقم طلبك (مثال: A3F2B1) ورقم الهاتف المستخدم عند الحجز.</p>
+      <div class="field"><div class="box">#<input id="trackRef" placeholder="رقم الطلب" dir="ltr" style="text-transform:uppercase;"></div></div>
+      <div class="field"><div class="box">📞<input id="trackPhone" placeholder="رقم الهاتف" type="tel"></div></div>
+      <div class="err" id="trackErr" style="margin:-6px 0 10px;"></div>
+      <button class="primary-btn" id="trackSubmit">بحث</button>
+      <div id="trackResult" style="margin-top:16px;"></div>
+    </div>
+  `;
+  document.getElementById("closeModal").onclick = closeModal;
+  modalBg.onclick = (e) => { if (e.target === modalBg) closeModal(); };
+  modalBg.classList.add("open");
+
+  document.getElementById("trackSubmit").onclick = async () => {
+    const ref = document.getElementById("trackRef").value.trim().replace(/^#/, "");
+    const phone = document.getElementById("trackPhone").value.trim();
+    const errEl = document.getElementById("trackErr");
+    const resultEl = document.getElementById("trackResult");
+    errEl.textContent = ""; resultEl.innerHTML = "";
+    if (!ref || !phone) { errEl.textContent = "أدخل رقم الطلب ورقم الهاتف"; return; }
+
+    const btn = document.getElementById("trackSubmit");
+    btn.disabled = true; btn.textContent = "جارِ البحث...";
+    try {
+      const { data, error } = await supabaseClient.rpc('track_order', { p_ref: ref, p_phone: phone });
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        resultEl.innerHTML = `<p class="hint center">لم يتم العثور على طلب مطابق. تأكد من رقم الطلب ورقم الهاتف.</p>`;
+      } else {
+        const o = data[0];
+        const statusLabel = { pending: "قيد المراجعة", confirmed: "تم التأكيد ✓", cancelled: "ملغي ✕" }[o.review_status || "pending"] || "قيد المراجعة";
+        let reviewHtml = "";
+        if (o.review_status === "confirmed") {
+          if (o.customer_rating) {
+            reviewHtml = `
+              <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px;">
+                <div class="hint" style="margin-bottom:4px;">تقييمك:</div>
+                <div style="font-size:18px;">${"⭐".repeat(o.customer_rating)}${"☆".repeat(5 - o.customer_rating)}</div>
+                ${o.customer_review ? `<p style="font-size:13px;margin-top:6px;">${esc(o.customer_review)}</p>` : ""}
+              </div>
+            `;
+          } else {
+            reviewHtml = `
+              <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px;">
+                <div class="hint" style="margin-bottom:8px;">قيّم تجربتك معنا:</div>
+                <div id="starPicker" style="font-size:26px;letter-spacing:4px;margin-bottom:10px;cursor:pointer;">☆☆☆☆☆</div>
+                <textarea class="plain-textarea" id="reviewText" rows="2" placeholder="تعليقك (اختياري)"></textarea>
+                <div class="err" id="reviewErr" style="margin:-4px 0 8px;"></div>
+                <button class="primary-btn" id="submitReview">إرسال التقييم</button>
+              </div>
+            `;
+          }
+        }
+        resultEl.innerHTML = `
+          <div style="background:var(--card);border-radius:14px;padding:16px;">
+            <div style="font-weight:700;margin-bottom:6px;">${esc(o.product_name)}</div>
+            <div class="hint">تاريخ الطلب: ${new Date(o.created_at).toLocaleDateString("ar")}</div>
+            <div style="margin-top:10px;font-weight:700;">الحالة: ${statusLabel}</div>
+            ${reviewHtml}
+          </div>
+        `;
+
+        const starPicker = document.getElementById("starPicker");
+        if (starPicker) {
+          let selectedRating = 0;
+          starPicker.onclick = (e) => {
+            const rect = starPicker.getBoundingClientRect();
+            const relX = e.clientX - rect.left;
+            selectedRating = Math.max(1, Math.min(5, Math.ceil((relX / rect.width) * 5)));
+            starPicker.textContent = "⭐".repeat(selectedRating) + "☆".repeat(5 - selectedRating);
+          };
+          document.getElementById("submitReview").onclick = async () => {
+            const reviewErr = document.getElementById("reviewErr");
+            reviewErr.textContent = "";
+            if (!selectedRating) { reviewErr.textContent = "اختر تقييمًا بالنجوم أولًا"; return; }
+            const reviewBtn = document.getElementById("submitReview");
+            reviewBtn.disabled = true; reviewBtn.textContent = "جارِ الإرسال...";
+            try {
+              const { error: revError } = await supabaseClient.rpc('submit_order_review', {
+                p_order_id: o.id,
+                p_phone: phone,
+                p_rating: selectedRating,
+                p_review: document.getElementById("reviewText").value.trim() || null
+              });
+              if (revError) throw revError;
+              showToast("شكرًا لتقييمك!");
+              document.getElementById("trackSubmit").click();
+            } catch (e2) {
+              console.error("submit review error", e2);
+              reviewErr.textContent = "تعذر إرسال التقييم";
+              reviewBtn.disabled = false; reviewBtn.textContent = "إرسال التقييم";
+            }
+          };
+        }
+      }
+    } catch (e) {
+      console.error("track order error", e);
+      errEl.textContent = "تعذر البحث، حاول مجددًا";
+    }
+    btn.disabled = false; btn.textContent = "بحث";
+  };
 }
 
 function openPoliciesModal(){
@@ -599,9 +753,14 @@ function openBookingModal(){
   // القيم تُحفظ هنا وتُعاد تعبئتها في كل إعادة رسم، لأن paint() يعيد بناء الـ HTML من الصفر
   // في كل مرة (عند تغيير الكمية أو المدينة)، وبدون هذا كانت قيم الحقول تُمسح بالكامل.
   const vals = { name: "", loc: "", phone: "", instagram: "", cityId: "", cityName: "", regionId: "", regionName: "" };
+  let appliedCoupon = null; // { code, discount_type, discount_value }
 
   function paint(){
     const total = qty * Number(p.price);
+    const discount = appliedCoupon
+      ? Math.min(total, appliedCoupon.discount_type === 'percent' ? Math.round(total * appliedCoupon.discount_value / 100) : appliedCoupon.discount_value)
+      : 0;
+    const finalTotal = total - discount;
     const modalImg = p.image ? '<img src="' + esc(p.image) + '" style="object-position:' + esc(p.image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
     const cityOptions = cities.map(c => `<option value="${esc(c.id)}" ${String(c.id)===String(vals.cityId) ? "selected" : ""}>${esc(c.city_name)}</option>`).join("");
     modalBg.innerHTML = `
@@ -643,7 +802,22 @@ function openBookingModal(){
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
         <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام" value="${esc(vals.instagram)}" dir="ltr"></div><div class="err" id="errInsta"></div></div>
 
-        <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(total)} د.ع</span></div>
+        ${appliedCoupon ? `
+          <div style="display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:12px;padding:10px 14px;margin-bottom:10px;font-size:13px;">
+            <span>✅ كود "${esc(appliedCoupon.code)}" مُطبَّق</span>
+            <button type="button" id="removeCoupon" style="background:none;border:0;color:var(--err);cursor:pointer;font-size:13px;">إزالة</button>
+          </div>
+        ` : `
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <input class="plain-input" id="couponInput" placeholder="كود الخصم (اختياري)" dir="ltr" style="margin-bottom:0;flex:1;">
+            <button type="button" id="applyCoupon" style="border:2px solid var(--btn-border);background:none;border-radius:12px;padding:0 16px;font-family:inherit;font-size:13px;cursor:pointer;">تطبيق</button>
+          </div>
+          <div class="err" id="couponErr" style="margin:-6px 0 10px;"></div>
+        `}
+
+        ${discount > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:2px;"><span>السعر قبل الخصم</span><span>${money(total)} د.ع</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--moss);margin-bottom:6px;"><span>الخصم</span><span>-${money(discount)} د.ع</span></div>` : ""}
+        <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(finalTotal)} د.ع</span></div>
         <button class="primary-btn" id="submitOrder">تأكيد الحجز</button>
       </div>
     `;
@@ -658,6 +832,34 @@ function openBookingModal(){
     document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
     document.getElementById("fInsta").oninput = (e) => vals.instagram = e.target.value;
     renderStreetChips();
+
+    const applyCouponBtn = document.getElementById("applyCoupon");
+    if (applyCouponBtn) {
+      applyCouponBtn.onclick = async () => {
+        const code = document.getElementById("couponInput").value.trim().toUpperCase();
+        const errEl = document.getElementById("couponErr");
+        errEl.textContent = "";
+        if (!code) { errEl.textContent = "أدخل كود الخصم"; return; }
+        applyCouponBtn.disabled = true; applyCouponBtn.textContent = "...";
+        try {
+          const { data, error } = await supabaseClient.rpc('validate_coupon', { p_code: code });
+          if (error) throw error;
+          if (!data || data.length === 0) {
+            errEl.textContent = "كود غير صالح أو منتهي";
+          } else {
+            appliedCoupon = { code, discount_type: data[0].discount_type, discount_value: data[0].discount_value };
+          }
+        } catch (e) {
+          console.error("coupon validate error", e);
+          errEl.textContent = "تعذر التحقق من الكود";
+        }
+        paint();
+      };
+    }
+    const removeCouponBtn = document.getElementById("removeCoupon");
+    if (removeCouponBtn) {
+      removeCouponBtn.onclick = () => { appliedCoupon = null; paint(); };
+    }
 
     if (!citiesFailed) {
       document.getElementById("fCity").onchange = async (e) => {
@@ -773,6 +975,10 @@ function openBookingModal(){
     const waWindow = window.open("", "_blank");
 
     const total = qty * Number(p.price);
+    const discount = appliedCoupon
+      ? Math.min(total, appliedCoupon.discount_type === 'percent' ? Math.round(total * appliedCoupon.discount_value / 100) : appliedCoupon.discount_value)
+      : 0;
+    const finalTotal = total - discount;
     const cityName = vals.cityName;
     const regionName = vals.regionName;
 
@@ -792,7 +998,8 @@ function openBookingModal(){
           region_name: regionName || null,
           instagram_username: instagram || null,
           qty,
-          total,
+          total: finalTotal,
+          coupon_code: appliedCoupon ? appliedCoupon.code : null,
           alwaseet_status: 'pending'
         }
       ])
@@ -830,7 +1037,7 @@ function openBookingModal(){
       try {
         const { qr_id, qr_link, assigned_username, assigned_whatsapp } = await sendOrderToAlwaseet({
           name, phone, cityId, regionId, location: loc,
-          productLabel: p.name, qty, total,
+          productLabel: p.name, qty, total: finalTotal,
           notes: instagram ? `انستغرام: @${instagram}` : undefined
         });
         localOrder.alwaseet_qr_id = qr_id;
@@ -859,7 +1066,7 @@ function openBookingModal(){
     // وإلا يُستخدم الرقم العام المشترك من الإعدادات كخطة بديلة
     const num = formatWhatsapp(assignedWhatsapp || state.settings.whatsapp);
     if (num){
-      const msg = `حجز جديد من QR CODE\nالمنتج: ${p.name}${variant.colorName ? `\nاللون: ${variant.colorName}` : ""}${variant.size ? `\nالقياس: ${variant.size}` : ""}\nالكمية: ${qty}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
+      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتج: ${p.name}${variant.colorName ? `\nاللون: ${variant.colorName}` : ""}${variant.size ? `\nالقياس: ${variant.size}` : ""}\nالكمية: ${qty}\nالسعر الإجمالي: ${finalTotal} د.ع${discount > 0 ? ` (بعد خصم ${discount} د.ع بكود ${appliedCoupon.code})` : ""}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
       if (waWindow) { waWindow.location.href = waUrl; }
       else { window.open(waUrl, "_blank"); } // احتياط لو حظر المتصفح النافذة المفتوحة مسبقًا لأي سبب
@@ -869,8 +1076,9 @@ function openBookingModal(){
       modalBg.querySelector(".modal").innerHTML = `
         <div class="center" style="padding:6px 0;">
           <div class="seal" style="margin:0 auto 16px;">✓</div>
-          <h2 style="margin-bottom:8px;">تم إرسال حجزك</h2>
-          <p class="hint" style="margin-bottom:22px;">فتحنا لك محادثة واتساب برسالة تحتوي كل تفاصيل طلبك — أرسلها الآن، وانتظر رد المتجر لتأكيد الحجز.</p>
+          <h2 style="margin-bottom:4px;">تم إرسال حجزك</h2>
+          <p style="font-weight:800;font-size:15px;margin-bottom:10px;">رقم طلبك: ${orderRef(inserted)}</p>
+          <p class="hint" style="margin-bottom:22px;">فتحنا لك محادثة واتساب برسالة تحتوي كل تفاصيل طلبك — أرسلها الآن، وانتظر رد المتجر لتأكيد الحجز. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
           <button class="primary-btn" id="closeWaitBtn">تم</button>
         </div>
       `;
@@ -878,7 +1086,7 @@ function openBookingModal(){
       return;
     }
     if (waWindow) waWindow.close(); // لا يوجد رقم واتساب مُعرَّف أصلًا في الإعدادات، أغلق النافذة الفارغة
-    showToast("تم إرسال الحجز بنجاح، سيتم التواصل معك قريبًا");
+    showToast(`تم إرسال الحجز بنجاح — رقم طلبك: ${orderRef(inserted)}`);
     closeModal();
     render();
   }
@@ -1102,7 +1310,7 @@ function openCustomOrderModal(){
     // يحدَّد السعر أولًا عبر التواصل، وبعدها يرسلها المشرف يدويًا من لوحة الإدارة
     const num = formatWhatsapp(state.settings.whatsapp);
     if (num){
-      const msg = `طلب مخصص جديد من QR CODE\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}${vals.designImage ? `\n🎨 صورة التصميم/المرجع: ${vals.designImage}` : ""}`;
+      const msg = `طلب مخصص جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}${vals.designImage ? `\n🎨 صورة التصميم/المرجع: ${vals.designImage}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
       if (waWindow) { waWindow.location.href = waUrl; }
       else { window.open(waUrl, "_blank"); }
@@ -1110,8 +1318,9 @@ function openCustomOrderModal(){
       modalBg.querySelector(".modal").innerHTML = `
         <div class="center" style="padding:6px 0;">
           <div class="seal" style="margin:0 auto 16px;">✓</div>
-          <h2 style="margin-bottom:8px;">تم إرسال طلبك</h2>
-          <p class="hint" style="margin-bottom:22px;">فتحنا لك محادثة واتساب بتفاصيل طلبك — أرسلها الآن، وسنتواصل معك لتحديد السعر وتأكيد التنفيذ.</p>
+          <h2 style="margin-bottom:4px;">تم إرسال طلبك</h2>
+          <p style="font-weight:800;font-size:15px;margin-bottom:10px;">رقم طلبك: ${orderRef(inserted)}</p>
+          <p class="hint" style="margin-bottom:22px;">فتحنا لك محادثة واتساب بتفاصيل طلبك — أرسلها الآن، وسنتواصل معك لتحديد السعر وتأكيد التنفيذ. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
           <button class="primary-btn" id="closeWaitBtn">تم</button>
         </div>
       `;
@@ -1119,7 +1328,7 @@ function openCustomOrderModal(){
       return;
     }
     if (waWindow) waWindow.close();
-    showToast("تم إرسال طلبك بنجاح، سيتم التواصل معك قريبًا");
+    showToast(`تم إرسال طلبك بنجاح — رقم طلبك: ${orderRef(inserted)}`);
     closeModal();
     render();
   }
@@ -1206,6 +1415,8 @@ function renderAdmin(){
       <button class="tab ${state.adminTab==='products'?'active':''}" data-tab="products">المنتجات</button>
       <button class="tab ${state.adminTab==='orders'?'active':''}" data-tab="orders">الحجوزات (${state.orders.length})${ordersBadge}</button>
       <button class="tab ${state.adminTab==='stats'?'active':''}" data-tab="stats">الإحصائيات</button>
+      <button class="tab ${state.adminTab==='coupons'?'active':''}" data-tab="coupons">الكوبونات</button>
+      <button class="tab ${state.adminTab==='activity'?'active':''}" data-tab="activity">سجل النشاط</button>
       <button class="tab ${state.adminTab==='settings'?'active':''}" data-tab="settings">الإعدادات</button>
       <button class="tab ${state.adminTab==='admins'?'active':''}" data-tab="admins">المشرفون</button>
       <button class="tab ${state.adminTab==='myAlwaseet'?'active':''}" data-tab="myAlwaseet">حسابي بالوسيط</button>
@@ -1258,6 +1469,8 @@ function renderAdmin(){
   }
   else if (state.adminTab === "orders") renderOrdersTab(body);
   else if (state.adminTab === "stats" && isOwner) renderStatsTab(body);
+  else if (state.adminTab === "coupons" && isOwner) renderCouponsTab(body);
+  else if (state.adminTab === "activity" && isOwner) renderActivityTab(body);
   else if (state.adminTab === "settings" && isOwner) renderSettingsTab(body);
   else if (state.adminTab === "admins" && isOwner) renderAdminsTab(body);
   else if (state.adminTab === "myAlwaseet") renderMyAlwaseetTab(body);
@@ -1680,6 +1893,113 @@ function printProductionSlip(o){
 }
 
 /* ======================= تبويب الإحصائيات ======================= */
+/* ======================= تبويب الكوبونات ======================= */
+async function renderCouponsTab(body){
+  body.innerHTML = `<p class="hint center" style="padding:20px 0;">جارِ التحميل...</p>`;
+  let coupons = [];
+  try {
+    const { data, error } = await supabaseClient.from('coupons').select('*').order('created_at', { ascending: false });
+    if (!error && data) coupons = data;
+  } catch (e) { console.error("coupons load error", e); }
+
+  body.innerHTML = `
+    <div class="panel">
+      <h3>إضافة كوبون جديد</h3>
+      <input class="plain-input" id="cCode" placeholder="الكود (مثال: EID20)" dir="ltr" style="text-transform:uppercase;">
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <select id="cType" style="flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-family:inherit;">
+          <option value="percent">نسبة مئوية %</option>
+          <option value="fixed">مبلغ ثابت (د.ع)</option>
+        </select>
+        <input class="plain-input" id="cValue" placeholder="القيمة" inputmode="numeric" style="flex:1;margin-bottom:0;">
+      </div>
+      <div class="err" id="cErr" style="margin:-6px 0 10px;"></div>
+      <button class="primary-btn" id="addCoupon">+ إضافة الكوبون</button>
+    </div>
+    <div class="panel">
+      <h3>الكوبونات الحالية</h3>
+      ${coupons.length === 0 ? `<p class="hint">لا توجد كوبونات مضافة بعد.</p>` : coupons.map(c => `
+        <div class="prod-row">
+          <div class="info">
+            <h4 dir="ltr" style="text-align:right;">${esc(c.code)}</h4>
+            <p>${c.discount_type === 'percent' ? `خصم ${esc(c.discount_value)}%` : `خصم ${money(c.discount_value)} د.ع`} — ${c.active ? '<span style="color:var(--moss);">فعّال</span>' : '<span style="color:var(--muted);">معطّل</span>'}</p>
+          </div>
+          <button class="del-btn" data-toggle-coupon="${c.id}" data-active="${c.active}" title="${c.active ? 'تعطيل' : 'تفعيل'}">${c.active ? '⏸' : '▶️'}</button>
+          <button class="del-btn" data-del-coupon="${c.id}">🗑</button>
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  document.getElementById("addCoupon").onclick = async () => {
+    const code = document.getElementById("cCode").value.trim().toUpperCase();
+    const type = document.getElementById("cType").value;
+    const value = Number(document.getElementById("cValue").value);
+    const errEl = document.getElementById("cErr");
+    errEl.textContent = "";
+    if (!code) { errEl.textContent = "أدخل كود الكوبون"; return; }
+    if (!value || value <= 0) { errEl.textContent = "أدخل قيمة صحيحة أكبر من صفر"; return; }
+    if (type === "percent" && value > 100) { errEl.textContent = "النسبة المئوية لا يمكن أن تتجاوز 100"; return; }
+
+    const btn = document.getElementById("addCoupon");
+    btn.disabled = true; btn.textContent = "جارِ الإضافة...";
+    const { error } = await supabaseClient.from('coupons').insert([{ code, discount_type: type, discount_value: value, active: true }]);
+    if (error) {
+      console.error("add coupon error", error);
+      errEl.textContent = error.message?.includes("duplicate") ? "هذا الكود مستخدم مسبقًا" : "تعذر إضافة الكوبون";
+      btn.disabled = false; btn.textContent = "+ إضافة الكوبون";
+      return;
+    }
+    showToast("تمت إضافة الكوبون بنجاح");
+    renderCouponsTab(body);
+  };
+
+  body.querySelectorAll("[data-toggle-coupon]").forEach(b => {
+    b.onclick = async () => {
+      const newActive = b.dataset.active !== "true";
+      const { error } = await supabaseClient.from('coupons').update({ active: newActive }).eq('id', b.dataset.toggleCoupon);
+      if (error) { showToast("تعذر التحديث", "err"); return; }
+      renderCouponsTab(body);
+    };
+  });
+  body.querySelectorAll("[data-del-coupon]").forEach(b => {
+    b.onclick = async () => {
+      if (!confirm("حذف هذا الكوبون؟")) return;
+      const { error } = await supabaseClient.from('coupons').delete().eq('id', b.dataset.delCoupon);
+      if (error) { showToast("تعذر الحذف", "err"); return; }
+      showToast("تم حذف الكوبون");
+      renderCouponsTab(body);
+    };
+  });
+}
+
+/* ======================= تبويب سجل النشاط ======================= */
+async function renderActivityTab(body){
+  body.innerHTML = `<p class="hint center" style="padding:20px 0;">جارِ التحميل...</p>`;
+  let logs = [];
+  try {
+    const { data, error } = await supabaseClient
+      .from('activity_log')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (!error && data) logs = data;
+  } catch (e) { console.error("activity log load error", e); }
+
+  body.innerHTML = `
+    <div class="panel">
+      <h3>آخر 100 عملية</h3>
+      ${logs.length === 0 ? `<p class="hint">لا يوجد نشاط مسجَّل بعد.</p>` : logs.map(l => `
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;">
+          <div><strong>${esc(l.admin_username)}</strong> — ${esc(l.action)}</div>
+          ${l.order_ref ? `<div class="hint">الطلب: ${esc(l.order_ref)}</div>` : ""}
+          <div class="hint" style="font-size:11px;margin-top:2px;">${new Date(l.created_at).toLocaleString("ar")}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderStatsTab(body){
   const confirmed = state.orders.filter(o => reviewStatus(o) === "confirmed");
   const totalRevenue = confirmed.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
@@ -1768,7 +2088,7 @@ function renderOrdersTab(body){
             ${orderImg}
             <div style="flex:1">
               <div style="font-weight:600;font-size:14px;">${esc(o.product_name)} <span style="color:var(--muted);font-weight:400;">${o.qty ? `× ${o.qty}` : ''}</span></div>
-              <div style="font-size:11px;color:var(--muted);">${new Date(o.created_at).toLocaleString("ar")}</div>
+              <div style="font-size:11px;color:var(--muted);">${orderRef(o)} · ${new Date(o.created_at).toLocaleString("ar")}</div>
             </div>
             <div style="font-weight:700;font-size:14px;">${o.total ? money(o.total) + ' د.ع' : ''}</div>
           </div>
@@ -1831,6 +2151,7 @@ function renderOrdersTab(body){
     order.review_status = status;
     showToast(status === 'confirmed' ? "تم تأكيد الطلب" : "تم إلغاء الطلب");
     notifyMainNumber(order, status === 'confirmed' ? "تم تأكيد الطلب" : "تم إلغاء الطلب");
+    logActivity(status === 'confirmed' ? "تأكيد طلب" : "إلغاء طلب", orderRef(order));
     renderOrdersTab(body);
   }
 
@@ -1932,6 +2253,8 @@ function renderOrdersTab(body){
       b.onclick = async () => {
         if (!confirm("هل أنت متأكد من حذف هذا الطلب نهائيًا؟")) return;
         const oid = b.dataset.delorder;
+        const orderBeforeDelete = state.orders.find(o => String(o.id) === String(oid));
+        const refStr = orderBeforeDelete ? orderRef(orderBeforeDelete) : null;
 
         if (!isDbId(oid)) {
           state.orders = state.orders.filter(o => String(o.id) !== String(oid));
@@ -1949,6 +2272,7 @@ function renderOrdersTab(body){
         }
         state.orders = state.orders.filter(o => String(o.id) !== String(oid));
         showToast("تم حذف الطلب");
+        logActivity("حذف طلب", refStr);
         renderOrdersTab(body);
       };
     });
@@ -1985,6 +2309,18 @@ function renderSettingsTab(body){
       <button class="primary-btn" id="saveWa">حفظ</button>
     </div>
     <div class="panel">
+      <h3>نسخة احتياطية</h3>
+      <p class="hint">يحمّل ملف يحتوي كل المنتجات والطلبات الحالية كنسخة احتياطية. يُنصح بتنزيلها بشكل دوري (مرة بالشهر مثلًا) وحفظها بمكان آمن.</p>
+      <button class="dark-btn" id="exportBackupBtn">⬇️ تنزيل نسخة احتياطية</button>
+    </div>
+    <div class="panel">
+      <h3>من نحن</h3>
+      <p class="hint">تظهر هذي للزبون عبر رابط "من نحن" أسفل الصفحة الرئيسية. اكتب قصة المتجر، سنوات الخبرة، أو أي شي يبني ثقة الزبون.</p>
+      <textarea class="plain-textarea" id="aboutInput" rows="6" placeholder="مثال:&#10;QR CODE متخصصون بالطباعة والتطريز والليزر منذ عام ...، نفّذنا مئات الطلبات المخصصة بجودة عالية واهتمام بالتفاصيل.">${esc(state.settings.aboutUs || "")}</textarea>
+      <div class="err" id="aboutErr" style="margin:-6px 0 10px;color:var(--err);font-size:12px;"></div>
+      <button class="primary-btn" id="saveAbout">حفظ</button>
+    </div>
+    <div class="panel">
       <h3>السياسات والشروط</h3>
       <p class="hint">تظهر هذي للزبون عبر رابط "السياسات والشروط" أسفل الصفحة الرئيسية. اكتب فيها سياسة الاستبدال/الإرجاع، مدة التنفيذ، طرق الدفع، أو أي شروط تحب توضحها.</p>
       <textarea class="plain-textarea" id="policiesInput" rows="6" placeholder="مثال:&#10;- مدة التنفيذ: 3-5 أيام عمل حسب نوع الطلب.&#10;- لا يوجد استبدال للمنتجات المخصصة بعد التنفيذ إلا بوجود عيب صناعة.&#10;- الدفع عند الاستلام.">${esc(state.settings.policies || "")}</textarea>
@@ -2007,6 +2343,51 @@ function renderSettingsTab(body){
     if (!file) return;
     pendingLogo = await resizeImage(file, 300, 0.85);
     document.getElementById("logoUpload").innerHTML = `<img src="${pendingLogo}" alt="الشعار الجديد">`;
+  };
+
+  document.getElementById("exportBackupBtn").onclick = async () => {
+    const btn = document.getElementById("exportBackupBtn");
+    btn.disabled = true; btn.textContent = "جارِ التجهيز...";
+    try {
+      await loadOrders();
+      const backup = {
+        exported_at: new Date().toISOString(),
+        products: state.products,
+        orders: state.orders,
+        settings: state.settings
+      };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `qr-code-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast("تم تنزيل النسخة الاحتياطية");
+    } catch (e) {
+      console.error("backup export error", e);
+      showToast("تعذر تجهيز النسخة الاحتياطية", "err");
+    }
+    btn.disabled = false; btn.textContent = "⬇️ تنزيل نسخة احتياطية";
+  };
+
+  document.getElementById("saveAbout").onclick = async () => {
+    const aboutUs = document.getElementById("aboutInput").value.trim();
+    const errEl = document.getElementById("aboutErr");
+    errEl.textContent = "";
+    const btn = document.getElementById("saveAbout");
+    btn.disabled = true; btn.textContent = "جارِ الحفظ...";
+    try {
+      const ok = await saveSiteContent({ aboutUs });
+      if (ok) showToast("تم حفظ محتوى \"من نحن\"");
+      else showToast("تعذر الحفظ في السحابة، تم الحفظ محليًا فقط", "err");
+    } catch (e) {
+      console.error("save about error", e);
+      errEl.textContent = "تعذر الحفظ";
+    }
+    btn.disabled = false; btn.textContent = "حفظ";
   };
 
   document.getElementById("savePolicies").onclick = async () => {
@@ -2292,6 +2673,27 @@ async function loadProducts(){
   }
 }
 
+async function loadReviews(){
+  try {
+    const { data, error } = await supabaseClient.rpc('get_public_reviews');
+    if (!error && data) state.reviews = data;
+  } catch (e) {
+    console.error("reviews load error", e);
+  }
+}
+
+async function logActivity(action, orderRefStr){
+  try {
+    await supabaseClient.from('activity_log').insert([{
+      admin_username: state.currentAdmin?.username || "غير معروف",
+      action,
+      order_ref: orderRefStr || null
+    }]);
+  } catch (e) {
+    console.error("activity log insert error", e);
+  }
+}
+
 async function loadOrders(){
   try {
     const { data: dbOrders, error: ordErr } = await supabaseClient
@@ -2355,7 +2757,7 @@ async function init(){
     if (!supabaseClient) throw new Error("Supabase client not initialized");
     initTheme();
     // المتجر لا يحتاج جدول الطلبات إطلاقًا — يُجلب فقط عند دخول لوحة الإدارة، لتسريع تحميل المتجر للزبون
-    await Promise.all([loadProducts(), loadSettings()]);
+    await Promise.all([loadProducts(), loadSettings(), loadReviews()]);
 
     loadingEl.style.display = "none";
     app.style.display = "block";

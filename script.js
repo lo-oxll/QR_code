@@ -1107,10 +1107,6 @@ function openCartCheckoutModal(){
     const btn = document.getElementById("submitOrder");
     btn.disabled = true; btn.textContent = "جارِ الإرسال...";
 
-    // نفتح نافذة واتساب فارغة الآن (أثناء نقرة الزر مباشرة)، ونملأ رابطها لاحقًا بعد جهوزية
-    // بيانات الطلب — لأن أغلب المتصفحات تمنع فتح نافذة جديدة تلقائيًا بعد أي عملية غير متزامنة (await)
-    const waWindow = window.open("", "_blank");
-
     const cartItems = state.cart.map(i => ({
       product_id: i.productId, name: i.name, price: i.price, qty: i.qty,
       colorName: i.colorName, size: i.size
@@ -1157,7 +1153,6 @@ function openCartCheckoutModal(){
 
     if (error) {
       console.error("Database insert error:", error);
-      if (waWindow) waWindow.close();
       showToast("تعذر حفظ الطلب: " + (error.message || "خطأ غير معروف"), "err");
       btn.disabled = false; btn.textContent = "تأكيد الطلب";
       return;
@@ -1229,24 +1224,24 @@ function openCartCheckoutModal(){
     if (num){
       const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}\nالسعر الإجمالي: ${finalTotal} د.ع${discount > 0 ? ` (بعد خصم ${discount} د.ع بكود ${appliedCoupon.code})` : ""}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
-      if (waWindow) { waWindow.location.href = waUrl; }
-      else { window.open(waUrl, "_blank"); } // احتياط لو حظر المتصفح النافذة المفتوحة مسبقًا لأي سبب
 
-      // شاشة انتظار داخل المودال نفسه بدل إغلاقه فورًا، لتوضيح أن الحجز أُرسل
-      // ويجب على الزبون إرسال رسالة الواتساب المفتوحة وانتظار رد المتجر لتأكيد الطلب
+      // نعرض رسالة النجاح أولًا داخل المودال، وفقط عند ضغط الزبون على "تم" نفتح واتساب —
+      // بنقرة مستخدم مباشرة، فلا تظهر أي علامة تبويب about:blank فارغة إطلاقًا
       modalBg.querySelector(".modal").innerHTML = `
         <div class="center" style="padding:6px 0;">
           <div class="seal" style="margin:0 auto 16px;">✓</div>
           <h2 style="margin-bottom:4px;">تم إرسال طلبك</h2>
           <p style="font-weight:800;font-size:15px;margin-bottom:10px;">رقم طلبك: ${orderRef(inserted)}</p>
-          <p class="hint" style="margin-bottom:22px;">فتحنا لك محادثة واتساب برسالة تحتوي كل تفاصيل طلبك — أرسلها الآن، وانتظر رد المتجر لتأكيد الحجز. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
+          <p class="hint" style="margin-bottom:22px;">اضغط "تم" لفتح محادثة واتساب برسالة تحتوي كل تفاصيل طلبك — أرسلها وانتظر رد المتجر لتأكيد الحجز. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
           <button class="primary-btn" id="closeWaitBtn">تم</button>
         </div>
       `;
-      document.getElementById("closeWaitBtn").onclick = () => { closeModal(); render(); };
+      document.getElementById("closeWaitBtn").onclick = () => {
+        window.open(waUrl, "_blank");
+        closeModal(); render();
+      };
       return;
     }
-    if (waWindow) waWindow.close(); // لا يوجد رقم واتساب مُعرَّف أصلًا في الإعدادات، أغلق النافذة الفارغة
     showToast(`تم إرسال الطلب بنجاح — رقم طلبك: ${orderRef(inserted)}`);
     closeModal();
     render();
@@ -1431,7 +1426,6 @@ function openCustomOrderModal(){
     const btn = document.getElementById("submitOrder");
     btn.disabled = true; btn.textContent = "جارِ الإرسال...";
 
-    const waWindow = window.open("", "_blank");
     const cityName = vals.cityName;
     const regionName = vals.regionName;
 
@@ -1460,7 +1454,6 @@ function openCustomOrderModal(){
 
     if (error) {
       console.error("Database insert error:", error);
-      if (waWindow) waWindow.close();
       showToast("تعذر إرسال الطلب: " + (error.message || "خطأ غير معروف"), "err");
       btn.disabled = false; btn.textContent = "إرسال الطلب";
       return;
@@ -1475,22 +1468,22 @@ function openCustomOrderModal(){
     if (num){
       const msg = `طلب مخصص جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}${vals.designImage ? `\n🎨 صورة التصميم/المرجع: ${vals.designImage}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
-      if (waWindow) { waWindow.location.href = waUrl; }
-      else { window.open(waUrl, "_blank"); }
 
       modalBg.querySelector(".modal").innerHTML = `
         <div class="center" style="padding:6px 0;">
           <div class="seal" style="margin:0 auto 16px;">✓</div>
           <h2 style="margin-bottom:4px;">تم إرسال طلبك</h2>
           <p style="font-weight:800;font-size:15px;margin-bottom:10px;">رقم طلبك: ${orderRef(inserted)}</p>
-          <p class="hint" style="margin-bottom:22px;">فتحنا لك محادثة واتساب بتفاصيل طلبك — أرسلها الآن، وسنتواصل معك لتحديد السعر وتأكيد التنفيذ. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
+          <p class="hint" style="margin-bottom:22px;">اضغط "تم" لفتح محادثة واتساب بتفاصيل طلبك — أرسلها وسنتواصل معك لتحديد السعر وتأكيد التنفيذ. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
           <button class="primary-btn" id="closeWaitBtn">تم</button>
         </div>
       `;
-      document.getElementById("closeWaitBtn").onclick = () => { closeModal(); render(); };
+      document.getElementById("closeWaitBtn").onclick = () => {
+        window.open(waUrl, "_blank");
+        closeModal(); render();
+      };
       return;
     }
-    if (waWindow) waWindow.close();
     showToast(`تم إرسال طلبك بنجاح — رقم طلبك: ${orderRef(inserted)}`);
     closeModal();
     render();

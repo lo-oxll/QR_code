@@ -1734,7 +1734,7 @@ function printInvoice(o){
     <table>
       <tr><td class="label">الزبون</td><td>${esc(o.customer_name)}</td></tr>
       <tr><td class="label">الهاتف</td><td dir="ltr">${esc(o.phone_number || o.phone || "")}</td></tr>
-      <tr><td class="label">العنوان</td><td>${esc(o.address || o.location || "")}${o.city_name ? " — " + esc(o.city_name) : ""}</td></tr>
+      <tr><td class="label">العنوان</td><td>${esc(o.address || o.location || "")}</td></tr>
     </table>
     <table style="margin-top:16px;">
       <tr style="font-weight:700;"><td>المنتج</td><td>الكمية</td><td>السعر</td></tr>
@@ -1940,7 +1940,7 @@ function renderCancellationRateChart(orders){
 function exportOrdersToCsv(orders){
   if (!orders || orders.length === 0) { showToast("لا توجد طلبات لتصديرها ضمن هذا الفلتر", "err"); return; }
 
-  const headers = ["رقم الطلب", "التاريخ", "الحالة", "اسم العميل", "الهاتف", "المدينة", "المنطقة", "العنوان", "المنتج", "الكمية", "الإجمالي (د.ع)", "انستغرام"];
+  const headers = ["رقم الطلب", "التاريخ", "الحالة", "اسم العميل", "الهاتف", "العنوان", "المنتج", "الكمية", "الإجمالي (د.ع)", "انستغرام"];
   const statusLabel = { pending: "قيد المراجعة", confirmed: "مؤكد", cancelled: "ملغي" };
 
   const csvEscape = (val) => {
@@ -1954,8 +1954,6 @@ function exportOrdersToCsv(orders){
     statusLabel[reviewStatus(o)] || reviewStatus(o),
     o.customer_name || "",
     o.phone_number || o.phone || "",
-    o.city_name || "",
-    o.region_name || "",
     o.address || o.location || "",
     o.product_name || "",
     o.qty || 1,
@@ -2120,7 +2118,7 @@ function renderOrdersTab(body){
       if (!o) return;
       const num = formatWhatsapp(o.assigned_staff_whatsapp || state.settings.whatsapp);
       if (!num) { showToast("لا يوجد رقم واتساب متاح لإرسال هذا الطلب", "err"); return; }
-      const msg = `تفاصيل الحجز - QR CODE\nالمنتج: ${o.product_name}\nالعميل: ${o.customer_name}\nالهاتف: ${o.phone_number || o.phone || ""}\nالموقع: ${o.address || o.location || ""}${o.city_name ? ` (${o.city_name}${o.region_name ? " - " + o.region_name : ""})` : ""}\nالإجمالي: ${money(o.total)} د.ع`;
+      const msg = `تفاصيل الحجز - QR CODE\nالمنتج: ${o.product_name}\nالعميل: ${o.customer_name}\nالهاتف: ${o.phone_number || o.phone || ""}\nالموقع: ${o.address || o.location || ""}\nالإجمالي: ${money(o.total)} د.ع`;
       window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank");
     };
   });

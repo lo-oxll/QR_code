@@ -31,19 +31,6 @@ async function sha256Hex(text) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-// شوارع رئيسية معروفة لكل منطقة، تُقترح تلقائيًا لتسريع وتوحيد إدخال الموقع.
-// المطابقة تتم بالاحتواء (includes) وليس التطابق الحرفي، لأن اسم المنطقة القادم من الوسيط
-// قد يكون بصيغة "مدينة الصدر - قطاع 17" وليس "مدينة الصدر" فقط.
-const STREETS_BY_REGION = {
-  "مدينة الصدر": ["شارع الداخل", "شارع الفلاح", "شارع الجوادر", "شارع الأرفلي", "شارع الكيارة", "العورة"],
-};
-function getStreetsForRegion(regionName){
-  if (!regionName) return [];
-  for (const key in STREETS_BY_REGION) {
-    if (regionName.includes(key)) return STREETS_BY_REGION[key];
-  }
-  return [];
-}
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
@@ -107,67 +94,6 @@ function handleTitleClickForAdmin(){
   }
 }
 
-/* ======================= الربط مع شركة الوسيط للتوصيل ======================= */
-// كل الاتصال بـ API الوسيط يمر عبر Edge Function باسم "alwaseet" على Supabase،
-// لأن اسم المستخدم وكلمة مرور التاجر يجب أن يبقيا على الخادم فقط ولا يظهرا هنا.
-const alwaseetCache = { cities: null, packageSizeId: null, regionsByCity: {} };
-
-async function alwaseetCall(action, params = {}) {
-  const { data, error } = await supabaseClient.functions.invoke('alwaseet', {
-    body: { action, ...params }
-  });
-  if (error) throw error;
-  if (!data || data.status !== true) throw new Error(data?.msg || "تعذر الاتصال بشركة التوصيل");
-  return data.data;
-}
-
-async function getAlwaseetCities() {
-  if (alwaseetCache.cities) return alwaseetCache.cities;
-  alwaseetCache.cities = await alwaseetCall('cities');
-  return alwaseetCache.cities;
-}
-
-async function getAlwaseetRegions(cityId) {
-  if (alwaseetCache.regionsByCity[cityId]) return alwaseetCache.regionsByCity[cityId];
-  const regions = await alwaseetCall('regions', { city_id: cityId });
-  alwaseetCache.regionsByCity[cityId] = regions;
-  return regions;
-}
-
-// يحدَّد حجم الطرد تلقائيًا (يُفضَّل "عادي") حتى لا نُثقل نموذج الحجز بحقل إضافي للزبونة
-async function getDefaultPackageSizeId() {
-  if (alwaseetCache.packageSizeId) return alwaseetCache.packageSizeId;
-  const sizes = await alwaseetCall('package-sizes');
-  const normal = sizes.find(s => s.size?.includes("عادي")) || sizes[0];
-  alwaseetCache.packageSizeId = normal?.id;
-  return alwaseetCache.packageSizeId;
-}
-
-// يرسل طلبًا واحدًا إلى الوسيط، ويعيد { qr_id, qr_link, assigned_username, assigned_whatsapp } عند النجاح أو يرمي خطأ عند الفشل
-async function sendOrderToAlwaseet({ name, phone, phone2, cityId, regionId, location, productLabel, qty, total, notes }) {
-  const packageSize = await getDefaultPackageSizeId();
-  const result = await alwaseetCall('create-order', {
-    client_name: name,
-    client_mobile: phone,
-    client_mobile2: phone2 || undefined,
-    city_id: cityId,
-    region_id: regionId,
-    location,
-    type_name: productLabel,
-    items_number: qty,
-    price: total,
-    package_size: packageSize,
-    merchant_notes: notes || ""
-  });
-  const row = Array.isArray(result) ? result[0] : result;
-  return {
-    qr_id: String(row.qr_id),
-    qr_link: row.qr_link,
-    assigned_username: row.assigned_staff_username || null,
-    assigned_whatsapp: row.assigned_staff_whatsapp || null
-  };
-}
-
 /* ======================= محتوى افتراضي للواجهة الرئيسية ======================= */
 // تُستخدم كقيم احتياطية إذا لم يضبط المالك محتوى مخصصًا من الإعدادات، أو إذا تعذّر الاتصال بالسحابة
 const DEFAULT_EYEBROW = "طباعة · تطريز · ليزر";
@@ -197,6 +123,7 @@ let state = {
   newOrdersCount: 0,
   staffList: [],
   orderFilter: "pending", // "pending" (قيد المراجعة، الرئيسي) | "confirmed" | "cancelled"
+  activityFilter: "", // فلترة سجل التدقيق حسب اسم المشرف
   storeSearch: "",       // نص البحث الحالي بواجهة المتجر
   storeCategory: "all",  // فلترة حسب نوع المنتج (category) — "all" يعرض الكل
   ordersDateFrom: "",    // فلترة الطلبات حسب التاريخ (تبويب الحجوزات) — من
@@ -965,12 +892,7 @@ function openPoliciesModal(){
 
 /* ---------- نافذة إتمام الطلب (سلة متعددة المنتجات) ---------- */
 function openCartCheckoutModal(){
-  let cities = [];
-  let regions = [];
-  let citiesFailed = false;
-  // القيم تُحفظ هنا وتُعاد تعبئتها في كل إعادة رسم، لأن paint() يعيد بناء الـ HTML من الصفر
-  // في كل مرة (عند تغيير المدينة مثلًا)، وبدون هذا كانت قيم الحقول تُمسح بالكامل.
-  const vals = { name: "", loc: "", phone: "", instagram: "", cityId: "", cityName: "", regionId: "", regionName: "" };
+  const vals = { name: "", loc: "", phone: "", instagram: "" };
 
   function paint(){
     const total = cartSubtotal();
@@ -988,7 +910,6 @@ function openCartCheckoutModal(){
         </div>
       `;
     }).join("");
-    const cityOptions = cities.map(c => `<option value="${esc(c.id)}" ${String(c.id)===String(vals.cityId) ? "selected" : ""}>${esc(c.city_name)}</option>`).join("");
     modalBg.innerHTML = `
       <div class="modal">
         <div class="row">
@@ -998,19 +919,7 @@ function openCartCheckoutModal(){
         <div style="margin-bottom:14px;">${itemsHtml}</div>
         <input id="fWebsite" type="text" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true">
         <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
-        ${citiesFailed ? "" : `
-        <div class="field"><div class="box">🏙️<select id="fCity" style="width:100%;background:transparent;border:0;outline:0;font-family:'Cairo',sans-serif;font-size:14px;">
-          <option value="">${cities.length ? "اختر المدينة" : "جارِ التحميل..."}</option>${cityOptions}
-        </select></div><div class="err" id="errCity"></div></div>
-        <div style="position:relative;">
-          <div class="field"><div class="box">🗺️<input id="fRegionSearch" autocomplete="off" value="${esc(vals.regionName)}"
-            placeholder="${!vals.cityId ? "اختر المدينة أولًا" : (regions.length ? "ابحث عن المنطقة" : "جارِ التحميل...")}"
-            ${vals.cityId ? "" : "disabled"}></div><div class="err" id="errRegion"></div></div>
-          <div id="regionSuggest" class="suggest-list" style="display:none;"></div>
-        </div>
-        `}
-        <div class="field"><div class="box">📍<input id="fLoc" placeholder="${citiesFailed ? "الموقع / العنوان" : "أقرب نقطة دالة (تفاصيل إضافية)"}" value="${esc(vals.loc)}"></div><div class="err" id="errLoc"></div></div>
-        ${citiesFailed ? "" : `<div id="streetChips" class="street-chips"></div>`}
+        <div class="field"><div class="box">📍<input id="fLoc" placeholder="الموقع / العنوان" value="${esc(vals.loc)}"></div><div class="err" id="errLoc"></div></div>
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
         <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام" value="${esc(vals.instagram)}" dir="ltr"></div><div class="err" id="errInsta"></div></div>
 
@@ -1026,89 +935,7 @@ function openCartCheckoutModal(){
     document.getElementById("fLoc").oninput = (e) => vals.loc = e.target.value;
     document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
     document.getElementById("fInsta").oninput = (e) => vals.instagram = e.target.value;
-    renderStreetChips();
-
-    if (!citiesFailed) {
-      document.getElementById("fCity").onchange = async (e) => {
-        vals.cityId = e.target.value;
-        vals.cityName = cities.find(c => String(c.id) === String(vals.cityId))?.city_name || "";
-        vals.regionId = ""; vals.regionName = "";
-        regions = [];
-        paint();
-        if (!vals.cityId) return;
-        try {
-          regions = await getAlwaseetRegions(vals.cityId);
-        } catch (err) {
-          console.error("regions load error", err);
-        }
-        paint();
-      };
-
-      const regionInput = document.getElementById("fRegionSearch");
-      const suggestEl = document.getElementById("regionSuggest");
-      function showRegionSuggestions(query){
-        const q = (query || "").trim();
-        const matches = q ? regions.filter(r => r.region_name.includes(q)) : regions;
-        if (!matches.length) { suggestEl.style.display = "none"; suggestEl.innerHTML = ""; return; }
-        suggestEl.innerHTML = matches.slice(0, 40).map(r =>
-          `<button type="button" data-rid="${esc(r.id)}" data-rname="${esc(r.region_name)}">${esc(r.region_name)}</button>`
-        ).join("");
-        suggestEl.style.display = "block";
-        suggestEl.querySelectorAll("[data-rid]").forEach(btn => {
-          // mousedown بدل click حتى يُنفَّذ قبل blur الذي يخفي القائمة
-          btn.onmousedown = (ev) => {
-            ev.preventDefault();
-            vals.regionId = btn.dataset.rid;
-            vals.regionName = btn.dataset.rname;
-            regionInput.value = vals.regionName;
-            suggestEl.style.display = "none";
-            renderStreetChips();
-          };
-        });
-      }
-      regionInput.oninput = (e) => {
-        vals.regionId = ""; // إلغاء أي منطقة مؤكدة سابقًا حتى تُختار منطقة جديدة فعليًا من الاقتراحات
-        vals.regionName = e.target.value;
-        showRegionSuggestions(e.target.value);
-      };
-      regionInput.onfocus = () => showRegionSuggestions(regionInput.value);
-      regionInput.addEventListener("blur", () => setTimeout(() => { suggestEl.style.display = "none"; }, 150));
-    }
   }
-
-  // يعرض أزرار سريعة لأشهر شوارع المنطقة المختارة (إن وُجدت) أسفل حقل الموقع،
-  // النقر على أي زر يضيف اسم الشارع لحقل الموقع مباشرة بدل كتابته يدويًا
-  function renderStreetChips(){
-    const el = document.getElementById("streetChips");
-    if (!el) return;
-    const streets = getStreetsForRegion(vals.regionName);
-    if (!streets.length) { el.innerHTML = ""; return; }
-    el.innerHTML = streets.map(s => `<button type="button" class="street-chip" data-street="${esc(s)}">${esc(s)}</button>`).join("");
-    el.querySelectorAll("[data-street]").forEach(btn => {
-      btn.onclick = () => {
-        const s = btn.dataset.street;
-        vals.loc = (vals.loc && !vals.loc.includes(s)) ? `${vals.loc} - ${s}` : (vals.loc || s);
-        const locInput = document.getElementById("fLoc");
-        if (locInput) locInput.value = vals.loc;
-      };
-    });
-  }
-
-  // تحميل قائمة المدن أول مرة فقط، وإن فشل الاتصال (مثلًا الدالة غير منشورة بعد)
-  // يتحول النموذج تلقائيًا لحقل عنوان نصي حر بدل تعطيل الحجز بالكامل
-  (async () => {
-    try {
-      cities = await Promise.race([
-        getAlwaseetCities(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("انتهت مهلة الاتصال")), 9000))
-      ]);
-      paint();
-    } catch (err) {
-      console.error("alwaseet cities load error", err);
-      citiesFailed = true;
-      paint();
-    }
-  })();
 
   async function submit(){
     if (document.getElementById("fWebsite")?.value) return;
@@ -1117,23 +944,15 @@ function openCartCheckoutModal(){
     const loc = vals.loc.trim();
     const phone = vals.phone.trim();
     const instagram = vals.instagram.trim().replace(/^@/, "");
-    const cityId = citiesFailed ? "" : vals.cityId;
-    const regionId = citiesFailed ? "" : vals.regionId;
     let ok = true;
     document.getElementById("errName").textContent = "";
     document.getElementById("errLoc").textContent = "";
     document.getElementById("errPhone").textContent = "";
     document.getElementById("errInsta").textContent = "";
-    if (!citiesFailed) {
-      document.getElementById("errCity").textContent = "";
-      document.getElementById("errRegion").textContent = "";
-    }
     if (!name){ document.getElementById("errName").textContent = "أدخل الاسم"; ok = false; }
     if (!loc){ document.getElementById("errLoc").textContent = "أدخل الموقع"; ok = false; }
     if (!phone || phone.replace(/\D/g,"").length < 8){ document.getElementById("errPhone").textContent = "أدخل رقم هاتف صحيح"; ok = false; }
     if (!instagram){ document.getElementById("errInsta").textContent = "أدخل يوزر الانستغرام"; ok = false; }
-    if (!citiesFailed && !cityId){ document.getElementById("errCity").textContent = "اختر المدينة"; ok = false; }
-    if (!citiesFailed && !regionId){ document.getElementById("errRegion").textContent = "اختر المنطقة"; ok = false; }
     if (!ok) return;
 
     const btn = document.getElementById("submitOrder");
@@ -1151,11 +970,7 @@ function openCartCheckoutModal(){
       if (i.size) parts.push(i.size);
       return `${i.name}${parts.length ? ` (${parts.join(" · ")})` : ""} × ${i.qty}`;
     }).join(", ");
-    const cityName = vals.cityName;
-    const regionName = vals.regionName;
 
-    // 1) إرسال الطلب إلى جدول orders في Supabase أولًا (هذا هو السجل الأساسي دائمًا،
-    //    بغض النظر عن نجاح أو فشل الاتصال بالوسيط لاحقًا)
     const { data: inserted, error } = await supabaseClient
       .from('orders')
       .insert([
@@ -1165,14 +980,9 @@ function openCartCheckoutModal(){
           address: loc,
           product_name: productSummary,
           cart_items: cartItems,
-          city_id: cityId || null,
-          region_id: regionId || null,
-          city_name: cityName || null,
-          region_name: regionName || null,
           instagram_username: instagram || null,
           qty: totalQty,
-          total,
-          alwaseet_status: 'pending'
+          total
         }
       ])
       .select()
@@ -1208,48 +1018,9 @@ function openCartCheckoutModal(){
     state.cart = [];
     saveCart();
 
-    // 2) إرسال الطلب مباشرة إلى الوسيط للتوصيل — فقط إذا اختار الزبون مدينة/منطقة فعليًا
-    let assignedWhatsapp = null;
-    if (cityId && regionId) {
-      try {
-        const { qr_id, qr_link, assigned_username, assigned_whatsapp } = await sendOrderToAlwaseet({
-          name, phone, cityId, regionId, location: loc,
-          productLabel: productSummary, qty: totalQty, total,
-          notes: instagram ? `انستغرام: @${instagram}` : undefined
-        });
-        localOrder.alwaseet_qr_id = qr_id;
-        localOrder.alwaseet_qr_link = qr_link;
-        localOrder.alwaseet_status = 'sent';
-        localOrder.assigned_staff_username = assigned_username;
-        localOrder.assigned_staff_whatsapp = assigned_whatsapp;
-        assignedWhatsapp = assigned_whatsapp;
-        await supabaseClient.rpc('update_order_alwaseet_public', {
-          p_order_id: inserted.id,
-          p_alwaseet_status: 'sent',
-          p_alwaseet_qr_id: qr_id,
-          p_alwaseet_qr_link: qr_link,
-          p_assigned_staff_username: assigned_username,
-          p_assigned_staff_whatsapp: assigned_whatsapp
-        });
-      } catch (err) {
-        // الحجز يبقى ناجحًا للزبون دائمًا حتى لو فشل الإرسال للوسيط —
-        // يمكن للمشرف إعادة المحاولة يدويًا من لوحة الإدارة
-        console.error("alwaseet create-order error", err);
-        localOrder.alwaseet_status = 'failed';
-        localOrder.alwaseet_error = err.message || "خطأ غير معروف";
-        await supabaseClient.rpc('update_order_alwaseet_public', {
-          p_order_id: inserted.id,
-          p_alwaseet_status: 'failed',
-          p_alwaseet_error: localOrder.alwaseet_error
-        });
-      }
-    }
-
-    // إن كان هناك مشرف مسؤول عن هذا الطلب برقم واتساب شخصي، تُفتح المحادثة معه مباشرة؛
-    // وإلا يُستخدم الرقم العام المشترك من الإعدادات كخطة بديلة
-    const num = formatWhatsapp(assignedWhatsapp || state.settings.whatsapp);
+    const num = formatWhatsapp(state.settings.whatsapp);
     if (num){
-      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
+      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 
       // نعرض رسالة النجاح أولًا داخل المودال، وفقط عند ضغط الزبون على "تم" نفتح واتساب —
@@ -1280,14 +1051,10 @@ function openCartCheckoutModal(){
 
 /* ======================= نافذة الطلب المخصص (بدون منتج محدد من الكتالوج) ======================= */
 function openCustomOrderModal(){
-  let cities = [];
-  let regions = [];
-  let citiesFailed = false;
-  const vals = { name: "", loc: "", phone: "", instagram: "", cityId: "", cityName: "", regionId: "", regionName: "", designImage: null, serviceType: "طباعة", desc: "" };
+  const vals = { name: "", loc: "", phone: "", instagram: "", designImage: null, serviceType: "طباعة", desc: "" };
   const SERVICE_TYPES = ["طباعة", "تطريز", "سجاد Tufting", "باجات / أقلام", "أخرى"];
 
   function paint(){
-    const cityOptions = cities.map(c => `<option value="${esc(c.id)}" ${String(c.id)===String(vals.cityId) ? "selected" : ""}>${esc(c.city_name)}</option>`).join("");
     modalBg.innerHTML = `
       <div class="modal">
         <div class="row">
@@ -1315,18 +1082,7 @@ function openCustomOrderModal(){
 
         <input id="fWebsite" type="text" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true">
         <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
-        ${citiesFailed ? "" : `
-        <div class="field"><div class="box">🏙️<select id="fCity" style="width:100%;background:transparent;border:0;outline:0;font-family:'Cairo',sans-serif;font-size:14px;">
-          <option value="">${cities.length ? "اختر المدينة" : "جارِ التحميل..."}</option>${cityOptions}
-        </select></div><div class="err" id="errCity"></div></div>
-        <div style="position:relative;">
-          <div class="field"><div class="box">🗺️<input id="fRegionSearch" autocomplete="off" value="${esc(vals.regionName)}"
-            placeholder="${!vals.cityId ? "اختر المدينة أولًا" : (regions.length ? "ابحث عن المنطقة" : "جارِ التحميل...")}"
-            ${vals.cityId ? "" : "disabled"}></div><div class="err" id="errRegion"></div></div>
-          <div id="regionSuggest" class="suggest-list" style="display:none;"></div>
-        </div>
-        `}
-        <div class="field"><div class="box">📍<input id="fLoc" placeholder="${citiesFailed ? "الموقع / العنوان" : "أقرب نقطة دالة (تفاصيل إضافية)"}" value="${esc(vals.loc)}"></div><div class="err" id="errLoc"></div></div>
+        <div class="field"><div class="box">📍<input id="fLoc" placeholder="الموقع / العنوان" value="${esc(vals.loc)}"></div><div class="err" id="errLoc"></div></div>
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
         <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام (اختياري)" value="${esc(vals.instagram)}" dir="ltr"></div></div>
 
@@ -1366,63 +1122,7 @@ function openCustomOrderModal(){
     };
     const removeDesignBtn = document.getElementById("removeDesign");
     if (removeDesignBtn) removeDesignBtn.onclick = () => { vals.designImage = null; paint(); };
-
-    if (!citiesFailed) {
-      document.getElementById("fCity").onchange = async (e) => {
-        vals.cityId = e.target.value;
-        vals.cityName = cities.find(c => String(c.id) === String(vals.cityId))?.city_name || "";
-        vals.regionId = ""; vals.regionName = "";
-        regions = [];
-        paint();
-        if (!vals.cityId) return;
-        try {
-          regions = await getAlwaseetRegions(vals.cityId);
-        } catch (err) {
-          console.error("regions load error", err);
-        }
-        paint();
-      };
-
-      const regionInput = document.getElementById("fRegionSearch");
-      const suggestEl = document.getElementById("regionSuggest");
-      function showRegionSuggestions(query){
-        const q = (query || "").trim();
-        const matches = q ? regions.filter(r => r.region_name.includes(q)) : regions;
-        if (!matches.length) { suggestEl.style.display = "none"; suggestEl.innerHTML = ""; return; }
-        suggestEl.innerHTML = matches.slice(0, 40).map(r =>
-          `<button type="button" data-rid="${esc(r.id)}" data-rname="${esc(r.region_name)}">${esc(r.region_name)}</button>`
-        ).join("");
-        suggestEl.style.display = "block";
-        suggestEl.querySelectorAll("[data-rid]").forEach(btn => {
-          btn.onmousedown = (ev) => {
-            ev.preventDefault();
-            vals.regionId = btn.dataset.rid;
-            vals.regionName = btn.dataset.rname;
-            regionInput.value = vals.regionName;
-            suggestEl.style.display = "none";
-          };
-        });
-      }
-      regionInput.oninput = (e) => {
-        vals.regionId = "";
-        vals.regionName = e.target.value;
-        showRegionSuggestions(e.target.value);
-      };
-      regionInput.onfocus = () => showRegionSuggestions(regionInput.value);
-      regionInput.addEventListener("blur", () => setTimeout(() => { suggestEl.style.display = "none"; }, 150));
-    }
   }
-
-  (async function loadCities(){
-    try {
-      cities = await getAlwaseetCities();
-      paint();
-    } catch (err) {
-      console.error("alwaseet cities load error", err);
-      citiesFailed = true;
-      paint();
-    }
-  })();
 
   async function submit(){
     if (document.getElementById("fWebsite")?.value) return;
@@ -1431,30 +1131,19 @@ function openCustomOrderModal(){
     const phone = vals.phone.trim();
     const instagram = vals.instagram.trim().replace(/^@/, "");
     const desc = vals.desc.trim();
-    const cityId = citiesFailed ? "" : vals.cityId;
-    const regionId = citiesFailed ? "" : vals.regionId;
     let ok = true;
     document.getElementById("errName").textContent = "";
     document.getElementById("errLoc").textContent = "";
     document.getElementById("errPhone").textContent = "";
     document.getElementById("errDesc").textContent = "";
-    if (!citiesFailed) {
-      document.getElementById("errCity").textContent = "";
-      document.getElementById("errRegion").textContent = "";
-    }
     if (!desc){ document.getElementById("errDesc").textContent = "اشرح لنا طلبك بإيجاز"; ok = false; }
     if (!name){ document.getElementById("errName").textContent = "أدخل الاسم"; ok = false; }
     if (!loc){ document.getElementById("errLoc").textContent = "أدخل الموقع"; ok = false; }
     if (!phone || phone.replace(/\D/g,"").length < 8){ document.getElementById("errPhone").textContent = "أدخل رقم هاتف صحيح"; ok = false; }
-    if (!citiesFailed && !cityId){ document.getElementById("errCity").textContent = "اختر المدينة"; ok = false; }
-    if (!citiesFailed && !regionId){ document.getElementById("errRegion").textContent = "اختر المنطقة"; ok = false; }
     if (!ok) return;
 
     const btn = document.getElementById("submitOrder");
     btn.disabled = true; btn.textContent = "جارِ الإرسال...";
-
-    const cityName = vals.cityName;
-    const regionName = vals.regionName;
 
     const { data: inserted, error } = await supabaseClient
       .from('orders')
@@ -1464,14 +1153,9 @@ function openCustomOrderModal(){
           phone_number: phone,
           address: loc,
           product_name: `طلب مخصص - ${vals.serviceType}`,
-          city_id: cityId || null,
-          region_id: regionId || null,
-          city_name: cityName || null,
-          region_name: regionName || null,
           instagram_username: instagram || null,
           qty: 1,
           total: null,
-          alwaseet_status: 'pending',
           design_image: vals.designImage || null,
           custom_request: desc
         }
@@ -1489,11 +1173,9 @@ function openCustomOrderModal(){
     const localOrder = { ...inserted };
     state.orders.unshift(localOrder);
 
-    // الطلبات المخصصة لا تُرسل تلقائيًا لشركة الوسيط لأن السعر غير محدد بعد —
-    // يحدَّد السعر أولًا عبر التواصل، وبعدها يرسلها المشرف يدويًا من لوحة الإدارة
     const num = formatWhatsapp(state.settings.whatsapp);
     if (num){
-      const msg = `طلب مخصص جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}${cityName ? ` (${cityName}${regionName ? " - " + regionName : ""})` : ""}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}${vals.designImage ? `\n🎨 صورة التصميم/المرجع: ${vals.designImage}` : ""}`;
+      const msg = `طلب مخصص جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}${vals.designImage ? `\n🎨 صورة التصميم/المرجع: ${vals.designImage}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 
       modalBg.querySelector(".modal").innerHTML = `
@@ -1577,6 +1259,7 @@ function renderAdminLogin(){
         await loadOrders();
         startOrderPolling();
         render();
+        logActivity("تسجيل دخول");
       } else {
         document.getElementById("loginErr").textContent = "اسم المستخدم أو كلمة المرور غير صحيحة";
         btn.disabled = false; btn.textContent = "دخول";
@@ -1605,12 +1288,10 @@ function renderAdmin(){
       <button class="tab ${state.adminTab==='activity'?'active':''}" data-tab="activity">سجل النشاط</button>
       <button class="tab ${state.adminTab==='settings'?'active':''}" data-tab="settings">الإعدادات</button>
       <button class="tab ${state.adminTab==='admins'?'active':''}" data-tab="admins">المشرفون</button>
-      <button class="tab ${state.adminTab==='myAlwaseet'?'active':''}" data-tab="myAlwaseet">حسابي بالوسيط</button>
     `
     : `
       <button class="tab ${state.adminTab==='orders'?'active':''}" data-tab="orders">الحجوزات (${state.orders.length})${ordersBadge}</button>
       <button class="tab ${state.adminTab==='products'?'active':''}" data-tab="products">المنتجات</button>
-      <button class="tab ${state.adminTab==='myAlwaseet'?'active':''}" data-tab="myAlwaseet">حسابي بالوسيط</button>
     `;
 
   app.innerHTML = `
@@ -1624,6 +1305,7 @@ function renderAdmin(){
     </div>
   `;
   document.getElementById("logoutBtn").onclick = () => {
+    logActivity("تسجيل خروج");
     stopOrderPolling();
     state.newOrdersCount = 0;
     document.title = "QR CODE | طباعة · تطريز · ليزر";
@@ -1645,8 +1327,8 @@ function renderAdmin(){
   });
 
   // حماية إضافية: منع الوصول لأي تبويب غير مصرح به حتى لو تم التلاعب بالحالة محليًا
-  // المشرف (staff) يُسمح له فقط بـ orders و products (عرض فقط) و myAlwaseet
-  if (!isOwner && !["orders", "products", "myAlwaseet"].includes(state.adminTab)) state.adminTab = "orders";
+  // المشرف (staff) يُسمح له فقط بـ orders و products (عرض فقط)
+  if (!isOwner && !["orders", "products"].includes(state.adminTab)) state.adminTab = "orders";
 
   const body = document.getElementById("adminBody");
   if (state.adminTab === "products") {
@@ -1658,7 +1340,6 @@ function renderAdmin(){
   else if (state.adminTab === "activity" && isOwner) renderActivityTab(body);
   else if (state.adminTab === "settings" && isOwner) renderSettingsTab(body);
   else if (state.adminTab === "admins" && isOwner) renderAdminsTab(body);
-  else if (state.adminTab === "myAlwaseet") renderMyAlwaseetTab(body);
   else renderOrdersTab(body);
 }
 
@@ -1908,6 +1589,7 @@ function renderProductsTab(body){
     }
 
     showToast("تمت إضافة المنتج بنجاح");
+    logActivity("إضافة منتج", name);
     await loadProducts();
     renderAdmin();
   };
@@ -1960,6 +1642,7 @@ function renderProductsTab(body){
         const p2 = state.products.find(x => String(x.id) === String(pid));
         if (p2) p2.stock = newStock;
         showToast("تم تحديث المخزون بنجاح");
+        logActivity("تحديث مخزون", `${p2 ? p2.name : pid} → ${newStock}`);
         renderAdmin();
       };
     });
@@ -1990,25 +1673,12 @@ function renderProductsTab(body){
         }
 
         showToast("تم حذف المنتج");
+        logActivity("حذف منتج", pid);
         await loadProducts();
         renderAdmin();
       };
     });
   }
-}
-
-// نص حالة الإرسال للوسيط فقط (بدون زر) — أزرار الإجراءات أصبحت موحّدة أسفل كل بطاقة
-function alwaseetStatusText(o){
-  if (o.alwaseet_status === 'sent' && o.alwaseet_qr_link) {
-    return `<a href="${esc(o.alwaseet_qr_link)}" target="_blank" style="font-size:11px;color:var(--moss);font-weight:700;">✓ أُرسل للوسيط · وصل #${esc(o.alwaseet_qr_id)}</a>`;
-  }
-  if (o.alwaseet_status === 'failed') {
-    return `<span style="font-size:11px;color:var(--err);">⚠ فشل الإرسال للوسيط (${esc(o.alwaseet_error || "خطأ")})</span>`;
-  }
-  if (o.city_id && o.region_id) {
-    return `<span style="font-size:11px;color:var(--muted);">⏳ لم تُرسل للوسيط بعد</span>`;
-  }
-  return `<span style="font-size:11px;color:var(--muted);">— بدون مدينة/منطقة —</span>`;
 }
 
 // حالة المراجعة الافتراضية "pending" لأي طلب قديم لم يُحدَّث بعد إضافة هذا العمود
@@ -2110,22 +1780,33 @@ async function renderActivityTab(body){
       .from('activity_log')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(200);
     if (!error && data) logs = data;
   } catch (e) { console.error("activity log load error", e); }
 
+  const admins = [...new Set(logs.map(l => l.admin_username))];
+  const filter = state.activityFilter || "";
+  const filtered = filter ? logs.filter(l => l.admin_username === filter) : logs;
+
   body.innerHTML = `
     <div class="panel">
-      <h3>آخر 100 عملية</h3>
-      ${logs.length === 0 ? `<p class="hint">لا يوجد نشاط مسجَّل بعد.</p>` : logs.map(l => `
+      <h3>سجل التدقيق — آخر 200 عملية</h3>
+      ${admins.length > 1 ? `
+      <select id="activityFilter" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-family:inherit;font-size:13px;margin-bottom:12px;">
+        <option value="">كل المشرفين</option>
+        ${admins.map(a => `<option value="${esc(a)}" ${a===filter?'selected':''}>${esc(a)}</option>`).join("")}
+      </select>` : ""}
+      ${filtered.length === 0 ? `<p class="hint">لا يوجد نشاط مسجَّل بعد.</p>` : filtered.map(l => `
         <div style="padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;">
           <div><strong>${esc(l.admin_username)}</strong> — ${esc(l.action)}</div>
-          ${l.order_ref ? `<div class="hint">الطلب: ${esc(l.order_ref)}</div>` : ""}
+          ${l.order_ref ? `<div class="hint">${esc(l.order_ref)}</div>` : ""}
           <div class="hint" style="font-size:11px;margin-top:2px;">${new Date(l.created_at).toLocaleString("ar")}</div>
         </div>
       `).join("")}
     </div>
   `;
+  const filterEl = document.getElementById("activityFilter");
+  if (filterEl) filterEl.onchange = (e) => { state.activityFilter = e.target.value; renderActivityTab(body); };
 }
 
 function renderStatsTab(body){
@@ -2345,7 +2026,6 @@ function renderOrdersTab(body){
     ? `<p class="hint center" style="padding:30px 0;">لا توجد حجوزات في هذا القسم.</p>`
     : filtered.map(o => {
       const orderImg = o.product_image ? '<img src="' + esc(o.product_image) + '" loading="lazy" decoding="async" style="object-position:' + esc(o.product_image_position || '50% 50%') + ';">' : '<div class="ph"></div>';
-      const cannotSendToAlwaseet = !o.city_id || !o.region_id || o.alwaseet_status === 'sent';
       return `
         <div class="order-card">
           <div class="order-top">
@@ -2358,12 +2038,11 @@ function renderOrdersTab(body){
           </div>
           <div class="order-details">
             <div>👤 ${esc(o.customer_name)}</div>
-            <div>📍 ${esc(o.address || o.location)}${o.city_name ? ` — ${esc(o.city_name)}${o.region_name ? " / " + esc(o.region_name) : ""}` : ""}</div>
+            <div>📍 ${esc(o.address || o.location)}</div>
             <div>📞 <a href="https://wa.me/${formatWhatsapp(o.phone_number || o.phone)}" target="_blank" style="color:var(--ink);text-decoration:underline;">${esc(o.phone_number || o.phone)}</a></div>
             ${o.instagram_username ? `<div>📷 <a href="https://instagram.com/${esc(o.instagram_username)}" target="_blank" style="color:var(--moss);text-decoration:underline;">@${esc(o.instagram_username)}</a></div>` : ""}
             ${o.custom_request ? `<div style="margin-top:6px;background:var(--card);padding:8px;border-radius:8px;">📝 ${esc(o.custom_request)}</div>` : ""}
             ${o.design_image ? `<div style="margin-top:6px;">🎨 <a href="${esc(o.design_image)}" target="_blank" style="color:var(--moss);text-decoration:underline;">عرض التصميم المُرفق من الزبون</a></div>` : ""}
-            <div style="margin-top:6px;">${alwaseetStatusText(o)}</div>
           </div>
           <div class="order-actions">
             <button class="btn-cancel" data-cancel="${o.id}" ${reviewStatus(o)==='cancelled' ? 'disabled' : ''}>✕ إلغاء</button>
@@ -2371,7 +2050,6 @@ function renderOrdersTab(body){
             <button class="btn-whatsapp" data-wa="${o.id}">💬 واتساب</button>
             <button class="btn-whatsapp" data-wacustomer="${o.id}">📱 واتساب العميل</button>
             <button class="btn-instagram" data-instagram="${o.id}" ${o.instagram_username ? '' : 'disabled'}>📷 انستغرام العميل</button>
-            <button class="btn-alwaseet" data-sendalwaseet="${o.id}" ${cannotSendToAlwaseet ? 'disabled' : ''}>${o.alwaseet_status === 'sent' ? '✓ أُرسل للوسيط' : '🚚 إرسال إلى الوسيط'}</button>
             <button class="btn-whatsapp" data-invoice="${o.id}">🧾 فاتورة</button>
             <button class="btn-whatsapp" data-slip="${o.id}">🖨️ إيصال إنتاج</button>
             ${isOwner ? `<button class="btn-delete" data-delorder="${o.id}">🗑 حذف</button>` : ''}
@@ -2477,56 +2155,6 @@ function renderOrdersTab(body){
       const o = state.orders.find(x => String(x.id) === String(b.dataset.instagram));
       if (!o || !o.instagram_username) return;
       window.open(`https://instagram.com/${o.instagram_username}`, "_blank");
-    };
-  });
-
-  body.querySelectorAll("[data-sendalwaseet]").forEach(b => {
-    b.onclick = async () => {
-      const order = state.orders.find(o => String(o.id) === String(b.dataset.sendalwaseet));
-      if (!order) return;
-      b.textContent = "جارِ الإرسال...";
-      b.disabled = true;
-      try {
-        const { qr_id, qr_link } = await sendOrderToAlwaseet({
-          name: order.customer_name,
-          phone: order.phone_number || order.phone,
-          cityId: order.city_id,
-          regionId: order.region_id,
-          location: order.address || order.location,
-          productLabel: (order.product_name || "").replace(/\s*\(عدد:.*\)$/, ""),
-          qty: order.qty || 1,
-          total: order.total || 0
-        });
-        order.alwaseet_qr_id = qr_id; order.alwaseet_qr_link = qr_link; order.alwaseet_status = 'sent';
-        if (isDbId(order.id)) {
-          await supabaseClient.rpc('update_order_secure', {
-            p_username: state.currentAdmin.username,
-            p_password_hash: state.currentAdmin.passwordHash,
-            p_order_id: order.id,
-            p_fields: { alwaseet_qr_id: qr_id, alwaseet_qr_link: qr_link, alwaseet_status: 'sent', alwaseet_error: null }
-          });
-        } else {
-          saveLocal(KEYS.ORDERS, state.orders);
-        }
-        showToast("تم إرسال الطلب إلى الوسيط بنجاح");
-        renderOrdersTab(body);
-      } catch (err) {
-        console.error("send alwaseet error", err);
-        order.alwaseet_error = err.message || "خطأ غير معروف";
-        order.alwaseet_status = 'failed';
-        if (isDbId(order.id)) {
-          await supabaseClient.rpc('update_order_secure', {
-            p_username: state.currentAdmin.username,
-            p_password_hash: state.currentAdmin.passwordHash,
-            p_order_id: order.id,
-            p_fields: { alwaseet_status: 'failed', alwaseet_error: order.alwaseet_error }
-          });
-        } else {
-          saveLocal(KEYS.ORDERS, state.orders);
-        }
-        showToast("فشل الإرسال للوسيط: " + order.alwaseet_error, "err");
-        renderOrdersTab(body);
-      }
     };
   });
 
@@ -2667,7 +2295,7 @@ function renderSettingsTab(body){
     btn.disabled = true; btn.textContent = "جارِ الحفظ...";
     try {
       const ok = await saveSiteContent({ aboutUs });
-      if (ok) showToast("تم حفظ محتوى \"من نحن\"");
+      if (ok) { showToast("تم حفظ محتوى \"من نحن\""); logActivity("تعديل محتوى من نحن"); }
       else showToast("تعذر الحفظ في السحابة، تم الحفظ محليًا فقط", "err");
     } catch (e) {
       console.error("save about error", e);
@@ -2684,7 +2312,7 @@ function renderSettingsTab(body){
     btn.disabled = true; btn.textContent = "جارِ الحفظ...";
     try {
       const ok = await saveSiteContent({ policies });
-      if (ok) showToast("تم حفظ السياسات بنجاح");
+      if (ok) { showToast("تم حفظ السياسات بنجاح"); logActivity("تعديل السياسات"); }
       else showToast("تعذر الحفظ في السحابة، تم الحفظ محليًا فقط", "err");
     } catch (e) {
       console.error("save policies error", e);
@@ -2707,7 +2335,7 @@ function renderSettingsTab(body){
         lede: lede || DEFAULT_LEDE,
         logo: pendingLogo
       });
-      if (ok) showToast("تم حفظ المحتوى بنجاح");
+      if (ok) { showToast("تم حفظ المحتوى بنجاح"); logActivity("تعديل محتوى الصفحة الرئيسية"); }
       else showToast("تعذر الحفظ في السحابة، تم الحفظ محليًا فقط", "err");
     } catch (e) {
       console.error("save content error", e);
@@ -2725,7 +2353,7 @@ function renderSettingsTab(body){
     }
     document.getElementById("waErr").textContent = "";
     const ok = await saveWhatsapp(formatWhatsapp(val));
-    if (ok) showToast("تم حفظ الإعدادات");
+    if (ok) { showToast("تم حفظ الإعدادات"); logActivity("تعديل رقم واتساب المتجر"); }
     else showToast("تعذر الحفظ في السحابة، تم الحفظ محليًا فقط", "err");
   };
 
@@ -2757,84 +2385,11 @@ function renderSettingsTab(body){
       msgEl.style.color = "var(--moss)";
       msgEl.textContent = "تم تغيير كلمة المرور بنجاح ✓";
       showToast("تم تغيير كلمة المرور");
+      logActivity("تغيير كلمة مرور المالك");
     } catch (e) {
       console.error("change password error", e);
       msgEl.style.color = "var(--err)";
       msgEl.textContent = "كلمة المرور الحالية غير صحيحة أو تعذر الاتصال";
-    }
-  };
-}
-
-/* ---------- تبويب حساب الوسيط الشخصي (owner و staff) ---------- */
-async function renderMyAlwaseetTab(body){
-  body.innerHTML = `<p class="hint center" style="padding:20px 0;">جارِ التحميل...</p>`;
-
-  let current = { has_account: false, alwaseet_username: "", whatsapp_number: "" };
-  try {
-    const { data, error } = await supabaseClient.rpc('get_my_alwaseet_account', {
-      p_username: state.currentAdmin.username,
-      p_password_hash: state.currentAdmin.passwordHash
-    });
-    if (error) throw error;
-    if (data && data.length > 0) current = data[0];
-  } catch (e) {
-    console.error("get_my_alwaseet_account error", e);
-    body.innerHTML = `<p class="hint center" style="padding:20px 0;">تعذر تحميل بيانات حسابك.<br>${esc(e.message || "")}</p>`;
-    return;
-  }
-
-  body.innerHTML = `
-    <div class="panel">
-      <h3>حساب الوسيط للتوصيل الخاص بي</h3>
-      <p class="hint">
-        اربط حسابك الخاص في "الوسيط للتوصيل" هنا حتى تصلك الحجوزات مباشرة على اسمك بالتناوب مع باقي المشرفين.
-        كلمة مرورك تُخزَّن مشفّرة ولا تُعرض لأي أحد بعد الحفظ، حتى لك.
-        ${current.has_account ? `<br><span style="color:var(--moss);font-weight:700;">✓ حسابك مضبوط حاليًا (${esc(current.alwaseet_username || "")})</span>` : `<br><span style="color:var(--err);font-weight:700;">لم تضبط حسابك بعد — لن تصلك أي حجوزات عبر الوسيط حتى تضبطه</span>`}
-      </p>
-      <input class="plain-input" id="awUsr" placeholder="اسم المستخدم في الوسيط" value="${esc(current.alwaseet_username || "")}" dir="ltr">
-      <input class="plain-input" id="awPw" type="password" placeholder="${current.has_account ? "كلمة مرور جديدة (اتركه فارغًا للإبقاء على القديمة)" : "كلمة المرور في الوسيط"}" dir="ltr">
-      <input class="plain-input" id="awWa" placeholder="رقم واتساب شخصي للتواصل مع الزبون (مثال: 9647701234567)" value="${esc(current.whatsapp_number || "")}" dir="ltr">
-      <div class="err" id="awErr" style="margin:-6px 0 10px;color:var(--err);font-size:12px;"></div>
-      <button class="primary-btn" id="saveAw">حفظ</button>
-    </div>
-  `;
-
-  document.getElementById("saveAw").onclick = async () => {
-    const awUsr = document.getElementById("awUsr").value.trim();
-    const awPw = document.getElementById("awPw").value;
-    const awWa = document.getElementById("awWa").value.trim();
-    const errEl = document.getElementById("awErr");
-    errEl.textContent = "";
-
-    if (awWa && !isValidWhatsapp(awWa)) {
-      errEl.textContent = "رقم واتساب غير صالح، أدخله مع مفتاح الدولة بدون علامة + (مثال: 9647701234567)";
-      return;
-    }
-    if (awUsr && !awPw && !current.has_account) {
-      errEl.textContent = "أدخل كلمة مرور حساب الوسيط";
-      return;
-    }
-
-    const btn = document.getElementById("saveAw");
-    btn.disabled = true; btn.textContent = "جارِ الحفظ...";
-    try {
-      const { error } = await supabaseClient.rpc('update_my_alwaseet_account', {
-        p_username: state.currentAdmin.username,
-        p_password_hash: state.currentAdmin.passwordHash,
-        p_alwaseet_username: awUsr || null,
-        // null يعني "أبقِ كلمة المرور الحالية كما هي دون تغيير" — هذا ما تفعله دالة SQL الآن،
-        // فلا خطر من فقدان كلمة مرور محفوظة سابقًا لمجرد ترك الحقل فارغًا
-        p_alwaseet_password: awPw || null,
-        p_whatsapp: awWa || null
-      });
-      if (error) throw error;
-      showToast("تم حفظ بيانات حسابك بنجاح");
-      renderMyAlwaseetTab(body);
-    } catch (e) {
-      console.error("update_my_alwaseet_account error", e);
-      errEl.textContent = e.message || "تعذر الحفظ";
-    } finally {
-      btn.disabled = false; btn.textContent = "حفظ";
     }
   };
 }
@@ -2882,6 +2437,7 @@ async function renderAdminsTab(body){
       // كلمة المرور بنصها الصريح موجودة هنا فقط لحظيًا قبل أن تُهاش وتُرسل.
       // بعد هذه اللحظة لا يمكن استرجاعها من أي مكان، لذا نعرضها مرة واحدة فقط للمشرف.
       showOneTimeCredentials(newUsr, newPw);
+      logActivity("إضافة مشرف", newUsr);
       await renderAdminsTab(body);
     } catch (e) {
       console.error("add admin error", e);
@@ -2926,6 +2482,7 @@ async function renderAdminsTab(body){
           });
           if (error) throw error;
           showToast("تمت الإزالة");
+          logActivity("إزالة مشرف", b.dataset.removeusr);
           await renderAdminsTab(body);
         } catch (e) {
           console.error("remove admin error", e);
@@ -2968,12 +2525,12 @@ async function loadReviews(){
   }
 }
 
-async function logActivity(action, orderRefStr){
+async function logActivity(action, details){
   try {
     await supabaseClient.from('activity_log').insert([{
       admin_username: state.currentAdmin?.username || "غير معروف",
       action,
-      order_ref: orderRefStr || null
+      order_ref: details || null
     }]);
   } catch (e) {
     console.error("activity log insert error", e);

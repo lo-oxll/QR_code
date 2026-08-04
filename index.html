@@ -8,19 +8,19 @@
 <meta name="description" content="QR CODE للطباعة والتطريز والليزر — تشيرتات، أوشحة تخرج، باجات تعريفية، أقلام مطبوعة، وسجاد Tufting بتصميم مخصص." />
 
 <!-- Open Graph: يظهر عند مشاركة رابط الموقع بواتساب/فيسبوك/تيليكرام -->
-<!-- ملاحظة: لما يصير عندك دومين، عدّل قيمة og:url لرابط موقعك الفعلي -->
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="QR CODE" />
 <meta property="og:title" content="QR CODE | طباعة · تطريز · ليزر" />
 <meta property="og:description" content="QR CODE للطباعة والتطريز والليزر — تشيرتات، أوشحة تخرج، باجات تعريفية، أقلام مطبوعة، وسجاد Tufting بتصميم مخصص." />
-<meta property="og:image" content="logo.png" />
+<meta property="og:url" content="https://lo-oxll.github.io/QR_code/" />
+<meta property="og:image" content="https://lo-oxll.github.io/QR_code/logo.png" />
 <meta property="og:locale" content="ar_AR" />
 
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary" />
 <meta name="twitter:title" content="QR CODE | طباعة · تطريز · ليزر" />
 <meta name="twitter:description" content="QR CODE للطباعة والتطريز والليزر — تشيرتات، أوشحة تخرج، باجات تعريفية، أقلام مطبوعة، وسجاد Tufting بتصميم مخصص." />
-<meta name="twitter:image" content="logo.png" />
+<meta name="twitter:image" content="https://lo-oxll.github.io/QR_code/logo.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800;900&family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
@@ -50,11 +50,13 @@
     var el = document.getElementById("loading");
     if (el && el.style.display !== "none") showStoreLoadError();
   }, 12000);
-  // شبكة أمان أخيرة: أي خطأ غير متوقع بأي مكان بالكود يظهر نفس رسالة الخطأ بدل شاشة عالقة بصمت
+  // شبكة أمان أخيرة: أي خطأ غير متوقع بأي مكان بالكود (بما فيها فشل تحميل ملف مثل script.js نفسه)
+  // يظهر نفس رسالة الخطأ فورًا بدل انتظار مهلة الـ12 ثانية. useCapture=true ضروري هنا لأن أخطاء
+  // تحميل الموارد (script/link/img) لا تصعد (bubble) عبر DOM، فيجب التقاطها بمرحلة الالتقاط (capture).
   window.addEventListener("error", function(){
     var el = document.getElementById("loading");
     if (el && el.style.display !== "none") showStoreLoadError();
-  });
+  }, true);
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="showStoreLoadError()"></script>
 <script>
@@ -84,7 +86,8 @@
 <div id="toastHost"></div>
 
 <!-- شريط علوي ثابت: مفتاح الوضع الليلي/النهاري + زر السلة بجانبه.
-     زر قفل الإدارة غير موجود هنا إطلاقًا — يظهر فقط عبر إيماءة سرية (انظر initAdminGesture في script.js) -->
+     زر قفل الإدارة غير موجود هنا إطلاقًا — يظهر فقط عبر إيماءة سرية: النقر 3 مرات على عنوان المتجر
+     (انظر handleTitleClickForAdmin في script.js) -->
 <div class="top-bar" id="topBar">
   <button id="themeToggle" class="switch" title="الوضع الليلي/النهاري" aria-label="تبديل الوضع الليلي والنهاري">
     <span class="switch-thumb" id="themeThumb">🌙</span>

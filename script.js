@@ -321,6 +321,61 @@ const SOCIAL_PLATFORMS = {
   instagram: { label: "انستغرام", icon: "📷", urlPrefix: "https://instagram.com/" },
   tiktok: { label: "تيك توك", icon: "🎵", urlPrefix: "https://www.tiktok.com/@" },
 };
+
+/* ======================= المحافظات والمدن (العراق) =======================
+   قائمة عملية للاستخدام بحقول الحجز — وليست تقسيمًا إداريًا رسميًا دقيقًا (بعض العناصر
+   أحياء/نواحٍ متعارف عليها للتوصيل وليست "أقضية" رسمية). عدّل/أضف حسب مناطق تغطية التوصيل الفعلية. */
+const IRAQ_LOCATIONS = {
+  "بغداد": ["الكرخ","الرصافة","الكاظمية","الأعظمية","الدورة","الشعلة","الحرية","المنصور","الكرادة","زيونة","المشتل","الغزالية","أبو غريب","الطارمية","المدائن","مدينة الصدر","الشعب","اليرموك","الجادرية","بغداد الجديدة"],
+  "البصرة": ["مركز البصرة","الزبير","أبو الخصيب","القرنة","شط العرب","الفاو","المعقل","الهارثة"],
+  "نينوى": ["الموصل","تلعفر","سنجار","الحمدانية","تلكيف","الشيخان","البعاج","الحضر"],
+  "أربيل": ["أربيل","شقلاوة","سوران","كويسنجق","مخمور","خبات"],
+  "دهوك": ["دهوك","زاخو","سميل","العمادية","عقرة"],
+  "السليمانية": ["السليمانية","حلبجة","رانية","دوكان","بنجوين","دربندخان"],
+  "كركوك": ["كركوك","الحويجة","داقوق","الدبس"],
+  "ديالى": ["بعقوبة","المقدادية","بلدروز","خانقين","الخالص","كفري"],
+  "صلاح الدين": ["تكريت","سامراء","بيجي","الدور","الشرقاط","بلد","الدجيل"],
+  "الأنبار": ["الرمادي","الفلوجة","هيت","حديثة","عنه","القائم","الرطبة"],
+  "بابل": ["الحلة","المسيب","الهاشمية","المحاويل","القاسم"],
+  "كربلاء": ["كربلاء","عين التمر","الهندية"],
+  "النجف": ["النجف","الكوفة","المناذرة"],
+  "واسط": ["الكوت","الحي","النعمانية","الصويرة","بدرة"],
+  "القادسية": ["الديوانية","عفك","الشامية","الحمزة"],
+  "المثنى": ["السماوة","الرميثة","الخضر"],
+  "ذي قار": ["الناصرية","الشطرة","سوق الشيوخ","الرفاعي","الجبايش"],
+  "ميسان": ["العمارة","المجر الكبير","علي الغربي","قلعة صالح"],
+};
+
+// يبني حقلي "المحافظة" و"المدينة" (المدينة تعتمد على المحافظة المختارة، ومعطّلة قبل اختيارها)
+function locationFieldsHtml(vals){
+  const cities = vals.governorate ? (IRAQ_LOCATIONS[vals.governorate] || []) : [];
+  return `
+    <div class="field">
+      <div class="box">🗺️<select id="fGov">
+        <option value="">اختر المحافظة</option>
+        ${Object.keys(IRAQ_LOCATIONS).map(g => `<option value="${esc(g)}" ${vals.governorate === g ? "selected" : ""}>${esc(g)}</option>`).join("")}
+      </select></div>
+      <div class="err" id="errGov"></div>
+    </div>
+    <div class="field">
+      <div class="box">📍<select id="fCity" ${vals.governorate ? "" : "disabled"}>
+        <option value="">${vals.governorate ? "اختر المدينة" : "اختر المحافظة أولًا"}</option>
+        ${cities.map(c => `<option value="${esc(c)}" ${vals.city === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
+      </select></div>
+      <div class="err" id="errCity"></div>
+    </div>
+  `;
+}
+
+// يربط أحداث حقلي المحافظة/المدينة؛ يستدعي paint() عند تغيير المحافظة لإعادة بناء قائمة المدن
+function bindLocationFields(vals, paint){
+  document.getElementById("fGov").onchange = (e) => {
+    vals.governorate = e.target.value;
+    vals.city = "";
+    paint();
+  };
+  document.getElementById("fCity").onchange = (e) => { vals.city = e.target.value; };
+}
 function encodeSocial(platform, handle){
   const h = (handle || "").trim().replace(/^@/, "");
   if (!h) return null;
@@ -927,7 +982,7 @@ function openPoliciesModal(){
 
 /* ---------- نافذة إتمام الطلب (سلة متعددة المنتجات) ---------- */
 function openCartCheckoutModal(){
-  const vals = { name: "", loc: "", phone: "", socialPlatform: "instagram", socialHandle: "" };
+  const vals = { name: "", governorate: "", city: "", phone: "", socialPlatform: "instagram", socialHandle: "" };
 
   function paint(){
     const total = cartSubtotal();
@@ -954,7 +1009,7 @@ function openCartCheckoutModal(){
         <div style="margin-bottom:14px;">${itemsHtml}</div>
         <input id="fWebsite" type="text" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true">
         <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
-        <div class="field"><div class="box">📍<input id="fLoc" placeholder="الموقع / العنوان" value="${esc(vals.loc)}"></div><div class="err" id="errLoc"></div></div>
+        ${locationFieldsHtml(vals)}
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
 
         <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">حساب التواصل (اختياري)</p>
@@ -972,7 +1027,7 @@ function openCartCheckoutModal(){
     document.getElementById("submitOrder").onclick = submit;
     // حفظ القيم فور كتابتها حتى تبقى محفوظة عبر أي إعادة رسم لاحقة
     document.getElementById("fName").oninput = (e) => vals.name = e.target.value;
-    document.getElementById("fLoc").oninput = (e) => vals.loc = e.target.value;
+    bindLocationFields(vals, paint);
     document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
     document.getElementById("fSocial").oninput = (e) => vals.socialHandle = e.target.value;
     document.querySelectorAll("#socialPlatformRow [data-social-platform]").forEach(chip => {
@@ -984,15 +1039,17 @@ function openCartCheckoutModal(){
     if (document.getElementById("fWebsite")?.value) return;
     if (state.cart.length === 0) { showToast("السلة فارغة", "err"); return; }
     const name = vals.name.trim();
-    const loc = vals.loc.trim();
+    const loc = (vals.governorate && vals.city) ? `${vals.governorate} - ${vals.city}` : "";
     const phone = normalizeDigits(vals.phone.trim());
     const socialHandle = vals.socialHandle.trim().replace(/^@/, "");
     let ok = true;
     document.getElementById("errName").textContent = "";
-    document.getElementById("errLoc").textContent = "";
+    document.getElementById("errGov").textContent = "";
+    document.getElementById("errCity").textContent = "";
     document.getElementById("errPhone").textContent = "";
     if (!name){ document.getElementById("errName").textContent = "أدخل الاسم"; ok = false; }
-    if (!loc){ document.getElementById("errLoc").textContent = "أدخل الموقع"; ok = false; }
+    if (!vals.governorate){ document.getElementById("errGov").textContent = "اختر المحافظة"; ok = false; }
+    else if (!vals.city){ document.getElementById("errCity").textContent = "اختر المدينة"; ok = false; }
     if (!phone || phone.replace(/\D/g,"").length < 8){ document.getElementById("errPhone").textContent = "أدخل رقم هاتف صحيح"; ok = false; }
     if (!ok) return;
 
@@ -1093,7 +1150,7 @@ function openCartCheckoutModal(){
 
 /* ======================= نافذة الطلب المخصص (بدون منتج محدد من الكتالوج) ======================= */
 function openCustomOrderModal(){
-  const vals = { name: "", loc: "", phone: "", socialPlatform: "instagram", socialHandle: "", designImage: null, serviceType: "طباعة", desc: "" };
+  const vals = { name: "", governorate: "", city: "", phone: "", socialPlatform: "instagram", socialHandle: "", designImage: null, serviceType: "طباعة", desc: "" };
   const SERVICE_TYPES = ["طباعة", "تطريز", "سجاد Tufting", "باجات / أقلام", "أخرى"];
 
   function paint(){
@@ -1124,7 +1181,7 @@ function openCustomOrderModal(){
 
         <input id="fWebsite" type="text" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true">
         <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
-        <div class="field"><div class="box">📍<input id="fLoc" placeholder="الموقع / العنوان" value="${esc(vals.loc)}"></div><div class="err" id="errLoc"></div></div>
+        ${locationFieldsHtml(vals)}
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
 
         <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">حساب التواصل (اختياري)</p>
@@ -1145,7 +1202,7 @@ function openCustomOrderModal(){
     });
     document.getElementById("fCustomDesc").oninput = (e) => vals.desc = e.target.value;
     document.getElementById("fName").oninput = (e) => vals.name = e.target.value;
-    document.getElementById("fLoc").oninput = (e) => vals.loc = e.target.value;
+    bindLocationFields(vals, paint);
     document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
     document.getElementById("fSocial").oninput = (e) => vals.socialHandle = e.target.value;
     document.querySelectorAll("#socialPlatformRow [data-social-platform]").forEach(chip => {
@@ -1177,18 +1234,20 @@ function openCustomOrderModal(){
   async function submit(){
     if (document.getElementById("fWebsite")?.value) return;
     const name = vals.name.trim();
-    const loc = vals.loc.trim();
+    const loc = (vals.governorate && vals.city) ? `${vals.governorate} - ${vals.city}` : "";
     const phone = normalizeDigits(vals.phone.trim());
     const socialHandle = vals.socialHandle.trim().replace(/^@/, "");
     const desc = vals.desc.trim();
     let ok = true;
     document.getElementById("errName").textContent = "";
-    document.getElementById("errLoc").textContent = "";
+    document.getElementById("errGov").textContent = "";
+    document.getElementById("errCity").textContent = "";
     document.getElementById("errPhone").textContent = "";
     document.getElementById("errDesc").textContent = "";
     if (!desc){ document.getElementById("errDesc").textContent = "اشرح لنا طلبك بإيجاز"; ok = false; }
     if (!name){ document.getElementById("errName").textContent = "أدخل الاسم"; ok = false; }
-    if (!loc){ document.getElementById("errLoc").textContent = "أدخل الموقع"; ok = false; }
+    if (!vals.governorate){ document.getElementById("errGov").textContent = "اختر المحافظة"; ok = false; }
+    else if (!vals.city){ document.getElementById("errCity").textContent = "اختر المدينة"; ok = false; }
     if (!phone || phone.replace(/\D/g,"").length < 8){ document.getElementById("errPhone").textContent = "أدخل رقم هاتف صحيح"; ok = false; }
     if (!ok) return;
 

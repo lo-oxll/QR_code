@@ -158,6 +158,9 @@ h1.brand{font-size:clamp(26px,7vw,46px);margin:0;line-height:1;color:var(--ink);
 .field .box{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 14px;transition:border-color .2s;}
 .field .box:focus-within{border-color:var(--moss);}
 .field input, .field textarea{border:0;outline:0;background:transparent;flex:1;font-family:'Cairo',sans-serif;font-size:14px;color:var(--ink);}
+.field select{border:0;outline:0;background:transparent;flex:1;font-family:'Cairo',sans-serif;font-size:14px;color:var(--ink);appearance:none;-webkit-appearance:none;-moz-appearance:none;cursor:pointer;}
+.field select:disabled{opacity:.5;cursor:not-allowed;}
+.field select option{color:#000;}
 .field .err{color:var(--err);font-size:12px;margin:4px 4px 0;}
 .total-row{display:flex;justify-content:space-between;padding:0 2px;margin:18px 0 14px;font-weight:700;}
 .primary-btn{

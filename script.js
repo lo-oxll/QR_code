@@ -134,6 +134,17 @@ const loadingEl = document.getElementById("loading");
 const modalBg = document.getElementById("modalBg");
 
 function esc(s){ return (s ?? "").toString().replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+// يحوّل الأرقام العربية (١٢٣...) والفارسية (۱۲۳...) إلى أرقام لاتينية عادية (1,2,3...).
+// ضروري لأن كيبورد العربي بالجوال يكتب أرقامًا شرقية افتراضيًا، وJS (\d و Number()) لا يتعرف
+// عليها كأرقام إطلاقًا — أي حقل يتحقق من كون القيمة رقمًا (سعر، كمية، هاتف) لازم يمرّ من هنا أولًا.
+function normalizeDigits(str){
+  return (str ?? "").toString().replace(/[٠-٩۰-۹]/g, d => {
+    const code = d.charCodeAt(0);
+    if (code >= 0x0660 && code <= 0x0669) return String(code - 0x0660);
+    if (code >= 0x06F0 && code <= 0x06F9) return String(code - 0x06F0);
+    return d;
+  });
+}
 function money(n){ return Number(n||0).toLocaleString("ar"); }
 function orderRef(o){ return "#" + String(o.id).slice(-6).toUpperCase(); }
 
@@ -292,7 +303,7 @@ async function saveSiteContent({ eyebrow, lede, logo, policies, aboutUs }){
 
 /* ======================= توجيه واتساب ======================= */
 function formatWhatsapp(raw){
-  let d = (raw||"").replace(/\D/g,"");
+  let d = normalizeDigits(raw||"").replace(/\D/g,"");
   if (d.startsWith("00")) d = d.slice(2);
   if (d.startsWith("0")) d = "964" + d.slice(1);
   return d;
@@ -300,6 +311,31 @@ function formatWhatsapp(raw){
 function isValidWhatsapp(raw){
   const d = formatWhatsapp(raw);
   return d.length >= 10 && d.length <= 15;
+}
+
+/* ======================= حساب التواصل الاجتماعي (انستغرام أو تيك توك) =======================
+   نخزّنه بنفس عمود instagram_username الحالي بصيغة "platform:handle" (مثال: "tiktok:ahmed_123")
+   حتى لا نحتاج تعديل جدول قاعدة البيانات. السجلات القديمة (يوزر بدون بادئة) تُعامَل تلقائيًا
+   كانستغرام حفاظًا على التوافق مع الطلبات المسجَّلة سابقًا. */
+const SOCIAL_PLATFORMS = {
+  instagram: { label: "انستغرام", icon: "📷", urlPrefix: "https://instagram.com/" },
+  tiktok: { label: "تيك توك", icon: "🎵", urlPrefix: "https://www.tiktok.com/@" },
+};
+function encodeSocial(platform, handle){
+  const h = (handle || "").trim().replace(/^@/, "");
+  if (!h) return null;
+  return `${platform}:${h}`;
+}
+function parseSocial(raw){
+  if (!raw) return null;
+  const idx = raw.indexOf(":");
+  if (idx > -1 && SOCIAL_PLATFORMS[raw.slice(0, idx)]) {
+    return { platform: raw.slice(0, idx), handle: raw.slice(idx + 1) };
+  }
+  return { platform: "instagram", handle: raw }; // سجل قديم بدون بادئة منصة
+}
+function socialUrl(platform, handle){
+  return (SOCIAL_PLATFORMS[platform] || SOCIAL_PLATFORMS.instagram).urlPrefix + handle;
 }
 
 /* ======================= ضغط الصور إلى base64 ======================= */
@@ -673,7 +709,7 @@ function openTrackOrderModal(){
 
   document.getElementById("trackSubmit").onclick = async () => {
     const ref = document.getElementById("trackRef").value.trim().replace(/^#/, "");
-    const phone = document.getElementById("trackPhone").value.trim();
+    const phone = normalizeDigits(document.getElementById("trackPhone").value.trim());
     const errEl = document.getElementById("trackErr");
     const resultEl = document.getElementById("trackResult");
     errEl.textContent = ""; resultEl.innerHTML = "";
@@ -891,7 +927,7 @@ function openPoliciesModal(){
 
 /* ---------- نافذة إتمام الطلب (سلة متعددة المنتجات) ---------- */
 function openCartCheckoutModal(){
-  const vals = { name: "", loc: "", phone: "", instagram: "" };
+  const vals = { name: "", loc: "", phone: "", socialPlatform: "instagram", socialHandle: "" };
 
   function paint(){
     const total = cartSubtotal();
@@ -920,7 +956,12 @@ function openCartCheckoutModal(){
         <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
         <div class="field"><div class="box">📍<input id="fLoc" placeholder="الموقع / العنوان" value="${esc(vals.loc)}"></div><div class="err" id="errLoc"></div></div>
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
-        <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام" value="${esc(vals.instagram)}" dir="ltr"></div><div class="err" id="errInsta"></div></div>
+
+        <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">حساب التواصل (اختياري)</p>
+        <div class="size-row" id="socialPlatformRow" style="margin-bottom:8px;">
+          ${Object.entries(SOCIAL_PLATFORMS).map(([key, p]) => `<button type="button" class="size-chip ${vals.socialPlatform===key?'active':''}" data-social-platform="${key}">${p.icon} ${p.label}</button>`).join("")}
+        </div>
+        <div class="field"><div class="box">${SOCIAL_PLATFORMS[vals.socialPlatform].icon}<input id="fSocial" placeholder="يوزر ${esc(SOCIAL_PLATFORMS[vals.socialPlatform].label)} (اختياري)" value="${esc(vals.socialHandle)}" dir="ltr"></div></div>
 
         <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(total)} د.ع</span></div>
         <button class="primary-btn" id="submitOrder">تأكيد الطلب</button>
@@ -933,7 +974,10 @@ function openCartCheckoutModal(){
     document.getElementById("fName").oninput = (e) => vals.name = e.target.value;
     document.getElementById("fLoc").oninput = (e) => vals.loc = e.target.value;
     document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
-    document.getElementById("fInsta").oninput = (e) => vals.instagram = e.target.value;
+    document.getElementById("fSocial").oninput = (e) => vals.socialHandle = e.target.value;
+    document.querySelectorAll("#socialPlatformRow [data-social-platform]").forEach(chip => {
+      chip.onclick = () => { vals.socialPlatform = chip.dataset.socialPlatform; paint(); };
+    });
   }
 
   async function submit(){
@@ -941,17 +985,15 @@ function openCartCheckoutModal(){
     if (state.cart.length === 0) { showToast("السلة فارغة", "err"); return; }
     const name = vals.name.trim();
     const loc = vals.loc.trim();
-    const phone = vals.phone.trim();
-    const instagram = vals.instagram.trim().replace(/^@/, "");
+    const phone = normalizeDigits(vals.phone.trim());
+    const socialHandle = vals.socialHandle.trim().replace(/^@/, "");
     let ok = true;
     document.getElementById("errName").textContent = "";
     document.getElementById("errLoc").textContent = "";
     document.getElementById("errPhone").textContent = "";
-    document.getElementById("errInsta").textContent = "";
     if (!name){ document.getElementById("errName").textContent = "أدخل الاسم"; ok = false; }
     if (!loc){ document.getElementById("errLoc").textContent = "أدخل الموقع"; ok = false; }
     if (!phone || phone.replace(/\D/g,"").length < 8){ document.getElementById("errPhone").textContent = "أدخل رقم هاتف صحيح"; ok = false; }
-    if (!instagram){ document.getElementById("errInsta").textContent = "أدخل يوزر الانستغرام"; ok = false; }
     if (!ok) return;
 
     const btn = document.getElementById("submitOrder");
@@ -979,7 +1021,7 @@ function openCartCheckoutModal(){
           address: loc,
           product_name: productSummary,
           cart_items: cartItems,
-          instagram_username: instagram || null,
+          instagram_username: encodeSocial(vals.socialPlatform, socialHandle),
           qty: totalQty,
           total
         }
@@ -1019,7 +1061,8 @@ function openCartCheckoutModal(){
 
     const num = formatWhatsapp(state.settings.whatsapp);
     if (num){
-      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}`;
+      const socialLine = socialHandle ? `\n${SOCIAL_PLATFORMS[vals.socialPlatform].label}: ${socialUrl(vals.socialPlatform, socialHandle)}` : "";
+      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${socialLine}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 
       // نعرض رسالة النجاح أولًا داخل المودال، وفقط عند ضغط الزبون على "تم" نفتح واتساب —
@@ -1050,7 +1093,7 @@ function openCartCheckoutModal(){
 
 /* ======================= نافذة الطلب المخصص (بدون منتج محدد من الكتالوج) ======================= */
 function openCustomOrderModal(){
-  const vals = { name: "", loc: "", phone: "", instagram: "", designImage: null, serviceType: "طباعة", desc: "" };
+  const vals = { name: "", loc: "", phone: "", socialPlatform: "instagram", socialHandle: "", designImage: null, serviceType: "طباعة", desc: "" };
   const SERVICE_TYPES = ["طباعة", "تطريز", "سجاد Tufting", "باجات / أقلام", "أخرى"];
 
   function paint(){
@@ -1083,7 +1126,12 @@ function openCustomOrderModal(){
         <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
         <div class="field"><div class="box">📍<input id="fLoc" placeholder="الموقع / العنوان" value="${esc(vals.loc)}"></div><div class="err" id="errLoc"></div></div>
         <div class="field"><div class="box">📞<input id="fPhone" placeholder="رقم الهاتف" type="tel" value="${esc(vals.phone)}"></div><div class="err" id="errPhone"></div></div>
-        <div class="field"><div class="box">📷<input id="fInsta" placeholder="يوزر انستغرام (اختياري)" value="${esc(vals.instagram)}" dir="ltr"></div></div>
+
+        <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">حساب التواصل (اختياري)</p>
+        <div class="size-row" id="socialPlatformRow" style="margin-bottom:8px;">
+          ${Object.entries(SOCIAL_PLATFORMS).map(([key, p]) => `<button type="button" class="size-chip ${vals.socialPlatform===key?'active':''}" data-social-platform="${key}">${p.icon} ${p.label}</button>`).join("")}
+        </div>
+        <div class="field"><div class="box">${SOCIAL_PLATFORMS[vals.socialPlatform].icon}<input id="fSocial" placeholder="يوزر ${esc(SOCIAL_PLATFORMS[vals.socialPlatform].label)} (اختياري)" value="${esc(vals.socialHandle)}" dir="ltr"></div></div>
 
         <button class="primary-btn" id="submitOrder">إرسال الطلب</button>
       </div>
@@ -1099,7 +1147,10 @@ function openCustomOrderModal(){
     document.getElementById("fName").oninput = (e) => vals.name = e.target.value;
     document.getElementById("fLoc").oninput = (e) => vals.loc = e.target.value;
     document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
-    document.getElementById("fInsta").oninput = (e) => vals.instagram = e.target.value;
+    document.getElementById("fSocial").oninput = (e) => vals.socialHandle = e.target.value;
+    document.querySelectorAll("#socialPlatformRow [data-social-platform]").forEach(chip => {
+      chip.onclick = () => { vals.socialPlatform = chip.dataset.socialPlatform; paint(); };
+    });
 
     const designLabel = document.getElementById("designLabel");
     if (designLabel) designLabel.onclick = () => document.getElementById("fDesign").click();
@@ -1127,8 +1178,8 @@ function openCustomOrderModal(){
     if (document.getElementById("fWebsite")?.value) return;
     const name = vals.name.trim();
     const loc = vals.loc.trim();
-    const phone = vals.phone.trim();
-    const instagram = vals.instagram.trim().replace(/^@/, "");
+    const phone = normalizeDigits(vals.phone.trim());
+    const socialHandle = vals.socialHandle.trim().replace(/^@/, "");
     const desc = vals.desc.trim();
     let ok = true;
     document.getElementById("errName").textContent = "";
@@ -1152,7 +1203,7 @@ function openCustomOrderModal(){
           phone_number: phone,
           address: loc,
           product_name: `طلب مخصص - ${vals.serviceType}`,
-          instagram_username: instagram || null,
+          instagram_username: encodeSocial(vals.socialPlatform, socialHandle),
           qty: 1,
           total: null,
           design_image: vals.designImage || null,
@@ -1174,7 +1225,8 @@ function openCustomOrderModal(){
 
     const num = formatWhatsapp(state.settings.whatsapp);
     if (num){
-      const msg = `طلب مخصص جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${instagram ? `\nانستغرام: https://instagram.com/${instagram}` : ""}${vals.designImage ? `\n🎨 صورة التصميم/المرجع: ${vals.designImage}` : ""}`;
+      const socialLine = socialHandle ? `\n${SOCIAL_PLATFORMS[vals.socialPlatform].label}: ${socialUrl(vals.socialPlatform, socialHandle)}` : "";
+      const msg = `طلب مخصص جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${socialLine}${vals.designImage ? `\n🎨 صورة التصميم/المرجع: ${vals.designImage}` : ""}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 
       modalBg.querySelector(".modal").innerHTML = `
@@ -1552,7 +1604,7 @@ function renderProductsTab(body){
     paintUploadBox();
   };
   document.getElementById("pPrice").oninput = (e) => {
-    e.target.value = e.target.value.replace(/\D/g, "");
+    e.target.value = normalizeDigits(e.target.value).replace(/\D/g, "");
   };
 
   document.getElementById("addBtn").onclick = async () => {
@@ -1575,7 +1627,7 @@ function renderProductsTab(body){
     if (pendingImage) row.image_position = `${pendingPos.x}% ${pendingPos.y}%`;
     if (pendingSizes.size) row.sizes = [...pendingSizes].join(",");
     if (pendingColors.length) row.colors = pendingColors;
-    const stockVal = document.getElementById("pStock").value.trim();
+    const stockVal = normalizeDigits(document.getElementById("pStock").value.trim());
     if (stockVal !== "" && !isNaN(Number(stockVal))) row.stock = Math.max(0, Math.floor(Number(stockVal)));
 
     const { error } = await supabaseClient.from('products').insert([row]);
@@ -1619,7 +1671,7 @@ function renderProductsTab(body){
       b.onclick = async () => {
         const pid = b.dataset.stocksave;
         const input = list.querySelector(`[data-stockinput="${pid}"]`);
-        const raw = input.value.trim();
+        const raw = normalizeDigits(input.value.trim());
         const newStock = raw === "" ? null : Math.max(0, Math.floor(Number(raw)));
         if (raw !== "" && isNaN(newStock)) { showToast("أدخل رقمًا صحيحًا", "err"); return; }
 
@@ -1939,7 +1991,7 @@ function renderCancellationRateChart(orders){
 function exportOrdersToCsv(orders){
   if (!orders || orders.length === 0) { showToast("لا توجد طلبات لتصديرها ضمن هذا الفلتر", "err"); return; }
 
-  const headers = ["رقم الطلب", "التاريخ", "الحالة", "اسم العميل", "الهاتف", "العنوان", "المنتج", "الكمية", "الإجمالي (د.ع)", "انستغرام"];
+  const headers = ["رقم الطلب", "التاريخ", "الحالة", "اسم العميل", "الهاتف", "العنوان", "المنتج", "الكمية", "الإجمالي (د.ع)", "حساب التواصل"];
   const statusLabel = { pending: "قيد المراجعة", confirmed: "مؤكد", cancelled: "ملغي" };
 
   const csvEscape = (val) => {
@@ -1957,7 +2009,7 @@ function exportOrdersToCsv(orders){
     o.product_name || "",
     o.qty || 1,
     o.total || 0,
-    o.instagram_username || ""
+    (() => { const s = parseSocial(o.instagram_username); return s ? `${SOCIAL_PLATFORMS[s.platform].label}: ${s.handle}` : ""; })()
   ]);
 
   const csvContent = "\uFEFF" + [headers, ...rows].map(r => r.map(csvEscape).join(",")).join("\n");
@@ -2037,7 +2089,7 @@ function renderOrdersTab(body){
             <div>👤 ${esc(o.customer_name)}</div>
             <div>📍 ${esc(o.address || o.location)}</div>
             <div>📞 <a href="https://wa.me/${formatWhatsapp(o.phone_number || o.phone)}" target="_blank" style="color:var(--ink);text-decoration:underline;">${esc(o.phone_number || o.phone)}</a></div>
-            ${o.instagram_username ? `<div>📷 <a href="https://instagram.com/${esc(o.instagram_username)}" target="_blank" style="color:var(--moss);text-decoration:underline;">@${esc(o.instagram_username)}</a></div>` : ""}
+            ${(() => { const s = parseSocial(o.instagram_username); if (!s) return ""; const p = SOCIAL_PLATFORMS[s.platform]; return `<div>${p.icon} <a href="${esc(socialUrl(s.platform, s.handle))}" target="_blank" style="color:var(--moss);text-decoration:underline;">@${esc(s.handle)}</a></div>`; })()}
             ${o.custom_request ? `<div style="margin-top:6px;background:var(--card);padding:8px;border-radius:8px;">📝 ${esc(o.custom_request)}</div>` : ""}
             ${o.design_image ? `<div style="margin-top:6px;">🎨 <a href="${esc(o.design_image)}" target="_blank" style="color:var(--moss);text-decoration:underline;">عرض التصميم المُرفق من الزبون</a></div>` : ""}
           </div>
@@ -2046,7 +2098,7 @@ function renderOrdersTab(body){
             <button class="btn-confirm" data-confirm="${o.id}" ${reviewStatus(o)==='confirmed' ? 'disabled' : ''}>✓ تم التأكيد</button>
             <button class="btn-whatsapp" data-wa="${o.id}">💬 واتساب</button>
             <button class="btn-whatsapp" data-wacustomer="${o.id}">📱 واتساب العميل</button>
-            <button class="btn-instagram" data-instagram="${o.id}" ${o.instagram_username ? '' : 'disabled'}>📷 انستغرام العميل</button>
+            <button class="btn-instagram" data-instagram="${o.id}" ${o.instagram_username ? '' : 'disabled'}>${parseSocial(o.instagram_username) ? SOCIAL_PLATFORMS[parseSocial(o.instagram_username).platform].icon : '📷'} حساب العميل</button>
             <button class="btn-whatsapp" data-invoice="${o.id}">🧾 فاتورة</button>
             <button class="btn-whatsapp" data-slip="${o.id}">🖨️ إيصال إنتاج</button>
             ${isOwner ? `<button class="btn-delete" data-delorder="${o.id}">🗑 حذف</button>` : ''}
@@ -2146,12 +2198,13 @@ function renderOrdersTab(body){
     };
   });
 
-  // فتح صفحة انستغرام الشخصية للعميل كما كتبها بنفسه عند الحجز
+  // فتح صفحة التواصل الاجتماعي للعميل (انستغرام أو تيك توك) كما كتبها بنفسه عند الحجز
   body.querySelectorAll("[data-instagram]").forEach(b => {
     b.onclick = () => {
       const o = state.orders.find(x => String(x.id) === String(b.dataset.instagram));
-      if (!o || !o.instagram_username) return;
-      window.open(`https://instagram.com/${o.instagram_username}`, "_blank");
+      const s = o ? parseSocial(o.instagram_username) : null;
+      if (!s) return;
+      window.open(socialUrl(s.platform, s.handle), "_blank");
     };
   });
 

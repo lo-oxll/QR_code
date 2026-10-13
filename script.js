@@ -513,6 +513,7 @@ function renderStore(){
           ${imgTag}
           ${is3d ? `<span class="rotate-badge" title="اسحب يمينًا أو يسارًا للتدوير">🔄 اسحب للتدوير</span>` : ""}
           ${outOfStock ? `<span class="model3d-badge" style="background:#e5484d;">نفذت الكمية</span>` : ""}
+          ${!outOfStock && (p.featured || (p.created_at && Date.now() - new Date(p.created_at) < 14 * 864e5)) ? `<span class="foil">${p.featured ? "✦ مميز" : "جديد"}</span>` : ""}
         </div>
         ${colorRow}
         ${sizeRow}
@@ -896,7 +897,7 @@ function openCartModal(){
           <h2>سلتك</h2>
           <button class="close-x" id="closeModal">✕</button>
         </div>
-        <div>${itemsHtml}</div>
+        <div class="fade-y">${itemsHtml}</div>
         <div class="total-row"><span style="font-weight:400;color:var(--muted)">المجموع</span><span>${money(cartSubtotal())} د.ع</span></div>
         <button class="primary-btn" id="goCheckout">متابعة الطلب</button>
       </div>
@@ -983,7 +984,8 @@ function openCartCheckoutModal(){
   const vals = { name: "", governorate: "", city: "", phone: "", socialPlatform: "instagram", socialHandle: "" };
 
   function paint(){
-    const total = cartSubtotal();
+    const sub = cartSubtotal();
+    const total = sub - couponDiscount(vals.coupon, sub);
     const itemsHtml = state.cart.map(i => {
       const variantParts = [];
       if (i.colorName) variantParts.push(i.colorName);
@@ -1016,6 +1018,7 @@ function openCartCheckoutModal(){
         </div>
         <div class="field"><div class="box">${SOCIAL_PLATFORMS[vals.socialPlatform].icon}<input id="fSocial" placeholder="يوزر ${esc(SOCIAL_PLATFORMS[vals.socialPlatform].label)} (اختياري)" value="${esc(vals.socialHandle)}" dir="ltr"></div></div>
 
+        ${couponBlockHtml(vals, sub)}
         <div class="total-row"><span style="font-weight:400;color:var(--muted)">الإجمالي</span><span>${money(total)} د.ع</span></div>
         <button class="primary-btn" id="submitOrder">تأكيد الطلب</button>
       </div>
@@ -1026,6 +1029,7 @@ function openCartCheckoutModal(){
     // حفظ القيم فور كتابتها حتى تبقى محفوظة عبر أي إعادة رسم لاحقة
     document.getElementById("fName").oninput = (e) => vals.name = e.target.value;
     bindLocationFields(vals, paint);
+    bindCoupon(vals, paint);
     document.getElementById("fPhone").oninput = (e) => vals.phone = e.target.value;
     document.getElementById("fSocial").oninput = (e) => vals.socialHandle = e.target.value;
     document.querySelectorAll("#socialPlatformRow [data-social-platform]").forEach(chip => {
@@ -1058,7 +1062,9 @@ function openCartCheckoutModal(){
       product_id: i.productId, name: i.name, price: i.price, qty: i.qty,
       colorName: i.colorName, size: i.size
     }));
-    const total = cartSubtotal();
+    const subtotal = cartSubtotal();
+    const discount = couponDiscount(vals.coupon, subtotal);
+    const total = subtotal - discount;
     const totalQty = state.cart.reduce((s, i) => s + i.qty, 0);
     const productSummary = state.cart.map(i => {
       const parts = [];
@@ -1078,7 +1084,8 @@ function openCartCheckoutModal(){
           cart_items: cartItems,
           instagram_username: encodeSocial(vals.socialPlatform, socialHandle),
           qty: totalQty,
-          total
+          total,
+          ...(discount ? { coupon_code: vals.coupon.code, discount } : {})
         }
       ])
       .select()
@@ -1117,16 +1124,14 @@ function openCartCheckoutModal(){
     const num = formatWhatsapp(state.settings.whatsapp);
     if (num){
       const socialLine = socialHandle ? `\n${SOCIAL_PLATFORMS[vals.socialPlatform].label}: ${socialUrl(vals.socialPlatform, socialHandle)}` : "";
-      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${socialLine}`;
+      const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}${discount ? `\nكود الخصم: ${vals.coupon.code} (-${discount} د.ع)` : ""}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${socialLine}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 
       // نعرض رسالة النجاح أولًا داخل المودال، وفقط عند ضغط الزبون على "تم" نفتح واتساب —
       // بنقرة مستخدم مباشرة، فلا تظهر أي علامة تبويب about:blank فارغة إطلاقًا
       modalBg.querySelector(".modal").innerHTML = `
         <div class="center" style="padding:6px 0;">
-          <div class="seal" style="margin:0 auto 16px;">✓</div>
-          <h2 style="margin-bottom:4px;">تم إرسال طلبك</h2>
-          <p style="font-weight:800;font-size:15px;margin-bottom:10px;">رقم طلبك: ${orderRef(inserted)}</p>
+          ${receiptHtml({ ref: orderRef(inserted), items: cartItems, subtotal, discount, total, coupon: vals.coupon })}
           <p class="hint" style="margin-bottom:22px;">اضغط "تم" لفتح محادثة واتساب برسالة تحتوي كل تفاصيل طلبك — أرسلها وانتظر رد المتجر لتأكيد الحجز. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
           <button class="primary-btn" id="closeWaitBtn">تم</button>
         </div>
@@ -1137,9 +1142,14 @@ function openCartCheckoutModal(){
       };
       return;
     }
-    showToast(`تم إرسال الطلب بنجاح — رقم طلبك: ${orderRef(inserted)}`);
-    closeModal();
-    render();
+    modalBg.querySelector(".modal").innerHTML = `
+      <div class="center" style="padding:6px 0;">
+        ${receiptHtml({ ref: orderRef(inserted), items: cartItems, subtotal, discount, total, coupon: vals.coupon })}
+        <p class="hint" style="margin-bottom:22px;">احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
+        <button class="primary-btn" id="closeWaitBtn">تم</button>
+      </div>
+    `;
+    document.getElementById("closeWaitBtn").onclick = () => { closeModal(); render(); };
   }
 
   paint();
@@ -1492,6 +1502,7 @@ function renderProductsTab(body){
 
       <input class="plain-input" id="pStock" placeholder="الكمية المتوفرة (اختياري — اتركه فارغًا لكمية غير محدودة)" inputmode="numeric">
       <p class="hint" style="margin:-6px 0 16px;">إذا حددت رقمًا، يظهر "نفذت الكمية" تلقائيًا للزبون عند نفادها ويُمنع الحجز.</p>
+      <label class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 16px;cursor:pointer;"><input type="checkbox" id="pFeatured"> منتج مميز (تظهر عليه شارة ✦ مميز)</label>
 
       <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">القياسات المتوفرة (اختياري)</p>
       <div class="size-row" id="sizeBuilder" style="margin-bottom:16px;">
@@ -1681,6 +1692,7 @@ function renderProductsTab(body){
     const category = document.getElementById("pCategory").value.trim();
     const row = { name, price: Number(price), description: desc, image: pendingImage };
     if (category) row.category = category;
+    if (document.getElementById("pFeatured")?.checked) row.featured = true;
     if (pendingImage) row.image_position = `${pendingPos.x}% ${pendingPos.y}%`;
     if (pendingSizes.size) row.sizes = [...pendingSizes].join(",");
     if (pendingColors.length) row.colors = pendingColors;
@@ -1769,6 +1781,7 @@ function renderProductsTab(body){
           return;
         }
 
+        const deletedProduct = state.products.find(p => String(p.id) === String(pid));
         const { error } = await supabaseClient
           .from('products')
           .delete()
@@ -1780,7 +1793,10 @@ function renderProductsTab(body){
           return;
         }
 
-        showToast("تم حذف المنتج");
+        showUndoToast("تم حذف المنتج", async () => {
+          await supabaseClient.from('products').insert([deletedProduct]);
+          await loadProducts(); renderAdmin();
+        });
         logActivity("حذف منتج", pid);
         await loadProducts();
         renderAdmin();
@@ -2292,7 +2308,13 @@ function renderOrdersTab(body){
           return;
         }
         state.orders = state.orders.filter(o => String(o.id) !== String(oid));
-        showToast("تم حذف الطلب");
+        if (orderBeforeDelete) {
+          const { product_image, product_image_position, ...orderRow } = orderBeforeDelete;
+          showUndoToast("تم حذف الطلب", async () => {
+            await supabaseClient.from('orders').insert([orderRow]);
+            await loadOrders(); renderOrdersTab(body);
+          });
+        } else showToast("تم حذف الطلب");
         logActivity("حذف طلب", refStr);
         renderOrdersTab(body);
       };
@@ -2329,6 +2351,7 @@ function renderSettingsTab(body){
       <div class="err" id="waErr" style="margin:-6px 0 10px;color:var(--err);font-size:12px;"></div>
       <button class="primary-btn" id="saveWa">حفظ</button>
     </div>
+    <div class="panel" id="couponsPanel"></div>
     <div class="panel">
       <h3>نسخة احتياطية</h3>
       <p class="hint">يحمّل ملف يحتوي كل المنتجات والطلبات الحالية كنسخة احتياطية. يُنصح بتنزيلها بشكل دوري (مرة بالشهر مثلًا) وحفظها بمكان آمن.</p>
@@ -2356,6 +2379,7 @@ function renderSettingsTab(body){
       <button class="dark-btn" id="savePw">حفظ كلمة المرور</button>
     </div>
   `;
+  renderCouponsPanel(document.getElementById("couponsPanel"));
 
   let pendingLogo = state.settings.logo || "";
   document.getElementById("logoUpload").onclick = () => document.getElementById("logoFile").click();
@@ -2580,7 +2604,7 @@ async function renderAdminsTab(body){
     }).join("");
     listEl.querySelectorAll("[data-removeusr]").forEach(b => {
       b.onclick = async () => {
-        if (!confirm(`هل تريد إزالة صلاحية ${b.dataset.removeusr}؟`)) return;
+        if (!(await holdConfirm(`إزالة صلاحية ${b.dataset.removeusr}؟`))) return;
         try {
           const { error } = await supabaseClient.rpc('remove_staff_admin', {
             p_owner_username: state.currentAdmin.username,

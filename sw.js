@@ -9,7 +9,7 @@
    المخزّنة بالكاش حتى لو رفعت التعديل الجديد فعليًا على GitHub.
 ========================================================================= */
 
-const CACHE_NAME = "qrcode-static-v7";
+const CACHE_NAME = "qrcode-static-v9";
 
 // الملفات الثابتة فقط (لا تتغير كثيرًا) — يُحدَّث رقم النسخة أعلاه عند أي تعديل بها لإجبار تحديث الكاش
 const STATIC_ASSETS = [
@@ -51,21 +51,18 @@ self.addEventListener("fetch", (event) => {
   // لا نتدخل إطلاقًا في طلبات Supabase (بيانات المنتجات/الطلبات/الصور المرفوعة) — تبقى دائمًا Network فقط
   if (url.hostname.includes("supabase.co")) return;
 
-  // نفس الأصل فقط (ملفات الموقع الثابتة) — نطبّق: كاش أولًا، ثم شبكة كنسخة احتياطية، مع تحديث الكاش بصمت
+  // نفس الأصل فقط (ملفات الموقع الثابتة) — نطبّق: شبكة أولًا (دائمًا أحدث نسخة)، والكاش كنسخة احتياطية عند انقطاع الإنترنت
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(req).then((cached) => {
-        const network = fetch(req)
-          .then((res) => {
-            if (res && res.ok) {
-              const clone = res.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
-            }
-            return res;
-          })
-          .catch(() => cached);
-        return cached || network;
-      })
+      fetch(req)
+        .then((res) => {
+          if (res && res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(req))
     );
   }
 });

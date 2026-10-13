@@ -50,3 +50,219 @@ function holdConfirm(message, holdMs = 1200){
     ov.addEventListener("click", e => { if (e.target === ov) finish(false); });
   });
 }
+
+/* ---------- تراجع بعد الحذف (Hold to Confirm + Undo) ---------- */
+function showUndoToast(text, onUndo, ms = 6000){
+  const host = document.getElementById("toastHost") || document.body;
+  const el = document.createElement("div");
+  el.className = "toast undo-toast";
+  el.innerHTML = "<span></span><button type=\"button\">تراجع</button>";
+  el.firstChild.textContent = text;
+  host.appendChild(el);
+  let done = false;
+  const kill = () => { if (!done) { done = true; el.remove(); } };
+  el.querySelector("button").onclick = async () => {
+    if (done) return; kill();
+    try { await onUndo(); showToast("تم التراجع ✓"); } catch (e) { console.error("undo error", e); showToast("تعذر التراجع", "err"); }
+  };
+  setTimeout(kill, ms);
+}
+
+/* ---------- Scroll Fade List: تلاشي حواف القوائم القابلة للتمرير ---------- */
+function updateFade(el){
+  const vert = el.classList.contains("fade-y");
+  const rtl = getComputedStyle(el).direction === "rtl";
+  const pos = vert ? el.scrollTop : Math.abs(el.scrollLeft);
+  const max = vert ? el.scrollHeight - el.clientHeight : el.scrollWidth - el.clientWidth;
+  el.style.setProperty("--dir", vert ? "to bottom" : (rtl ? "to left" : "to right"));
+  el.style.setProperty("--f1", pos > 2 ? "28px" : "0px");
+  el.style.setProperty("--f2", max - pos > 2 ? "28px" : "0px");
+}
+function initFadeLists(){
+  document.querySelectorAll(".card .size-row, .card .color-row, .fade-y").forEach(el => {
+    if (!el.dataset.fade) {
+      el.dataset.fade = "1";
+      el.classList.add("fade-list");
+      el.addEventListener("scroll", () => updateFade(el), { passive: true });
+    }
+    updateFade(el);
+  });
+}
+
+/* ---------- Iridescent Foil: شارات "جديد" و"مميز" ---------- */
+let lastPtr = 0;
+function updateFoil(){
+  if (Date.now() - lastPtr < 500) return;
+  const h = window.innerHeight || 800;
+  document.querySelectorAll(".foil").forEach(el => {
+    const r = el.getBoundingClientRect();
+    const p = Math.max(0, Math.min(1, (r.top + r.height / 2) / h));
+    el.style.setProperty("--fx", (p * 100).toFixed(1) + "%");
+  });
+}
+window.addEventListener("scroll", () => {
+  if (updateFoil.t) return;
+  updateFoil.t = requestAnimationFrame(() => { updateFoil.t = 0; updateFoil(); });
+}, { passive: true });
+document.addEventListener("pointermove", e => {
+  const c = e.target.closest && e.target.closest(".card");
+  if (!c) return;
+  lastPtr = Date.now();
+  const r = c.getBoundingClientRect();
+  const x = ((e.clientX - r.left) / r.width * 100).toFixed(1) + "%";
+  c.querySelectorAll(".foil").forEach(f => f.style.setProperty("--fx", x));
+}, { passive: true });
+
+/* ---------- Magnetic Drop Zone: منطقة رفع تنجذب للملف أثناء السحب ---------- */
+function dropInput(zone){
+  for (let n = zone.previousElementSibling; n; n = n.previousElementSibling) if (n.matches && n.matches("input[type=file]")) return n;
+  for (let n = zone.nextElementSibling; n; n = n.nextElementSibling) if (n.matches && n.matches("input[type=file]")) return n;
+  return null;
+}
+let magZone = null;
+function resetZone(z){ if (!z) return; z.classList.remove("mag-near", "mag-over"); z.style.transform = ""; }
+function resetZones(){ document.querySelectorAll(".upload-box").forEach(resetZone); magZone = null; }
+document.addEventListener("dragover", e => {
+  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes("Files")) return;
+  const zones = Array.from(document.querySelectorAll(".upload-box"));
+  if (!zones.length) return;
+  let best = null, bd = Infinity;
+  zones.forEach(z => {
+    const r = z.getBoundingClientRect();
+    const d = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
+    if (d < bd) { bd = d; best = z; }
+  });
+  zones.forEach(z => { if (z !== best) resetZone(z); });
+  const r = best.getBoundingClientRect();
+  const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  if (bd < Math.max(r.width, r.height) / 2 + 140) {
+    e.preventDefault(); e.dataTransfer.dropEffect = "copy";
+    magZone = best;
+    const clamp = v => Math.max(-14, Math.min(14, v));
+    const dx = clamp((e.clientX - (r.left + r.width / 2)) * 0.08), dy = clamp((e.clientY - (r.top + r.height / 2)) * 0.08);
+    best.classList.add("mag-near"); best.classList.toggle("mag-over", inside);
+    best.style.transform = "translate(" + dx + "px," + dy + "px) scale(" + (inside ? 1.04 : 1.02) + ")";
+  } else { resetZone(best); magZone = null; }
+});
+document.addEventListener("dragleave", e => { if (!e.relatedTarget) resetZones(); });
+document.addEventListener("dragend", resetZones);
+document.addEventListener("drop", e => {
+  if (!magZone) return;
+  e.preventDefault();
+  const inp = dropInput(magZone), f = e.dataTransfer && e.dataTransfer.files;
+  resetZones();
+  if (!inp || !f || !f.length) return;
+  const dt = new DataTransfer();
+  Array.from(inp.multiple ? f : [f[0]]).forEach(x => dt.items.add(x));
+  inp.files = dt.files;
+  inp.dispatchEvent(new Event("change", { bubbles: true }));
+});
+
+/* ---------- Ticket / Stamp: كوبونات الخصم وبطاقات الهدايا ---------- */
+function ticketHtml(c, discount){
+  const pct = c.type === "percent";
+  return `<div class="ticket">
+    <div class="tk-main"><small>${pct ? "كوبون خصم" : "بطاقة هدية"}</small><b dir="ltr">${esc(c.code)}</b>${discount != null ? `<span>وفّرت ${money(discount)} د.ع</span>` : ""}</div>
+    <div class="tk-cut"></div>
+    <div class="tk-stamp"><div class="stamp"><b>${pct ? Number(c.value) + "%" : money(c.value)}</b><small>${pct ? "خصم" : "د.ع"}</small></div></div>
+  </div>`;
+}
+function couponDiscount(c, sub){
+  if (!c) return 0;
+  const v = Number(c.value) || 0;
+  const d = c.type === "percent" ? Math.round(sub * Math.min(v, 100) / 100) : v;
+  return Math.max(0, Math.min(d, sub));
+}
+async function findCoupon(code){
+  const k = String(code || "").trim().toUpperCase();
+  if (!k) return null;
+  const { data } = await supabaseClient.from("coupons").select("*").eq("code", k);
+  const c = (data || [])[0];
+  return c && c.active !== false ? c : null;
+}
+function couponBlockHtml(vals, sub){
+  if (vals.coupon) {
+    const d = couponDiscount(vals.coupon, sub);
+    return ticketHtml(vals.coupon, d) + `<button type="button" class="cp-remove" id="cpRemove">إزالة الكوبون</button>
+      <div class="total-row" style="margin:6px 0 0;color:var(--ok);"><span>الخصم</span><span>-${money(d)} د.ع</span></div>`;
+  }
+  return `<div class="cp-row"><div class="field" style="flex:1;margin:0;"><div class="box">🎟️<input id="cpInput" placeholder="كود الخصم (اختياري)" dir="ltr" autocomplete="off"></div></div><button type="button" class="size-chip" id="cpApply">تطبيق</button></div><div class="err" id="cpErr" style="margin:4px 0 0;"></div>`;
+}
+function bindCoupon(vals, repaint){
+  const rm = document.getElementById("cpRemove");
+  if (rm) rm.onclick = () => { vals.coupon = null; repaint(); };
+  const ap = document.getElementById("cpApply");
+  if (!ap) return;
+  ap.onclick = async () => {
+    const err = document.getElementById("cpErr");
+    const c = await findCoupon(document.getElementById("cpInput").value);
+    if (!c) { err.textContent = "الكود غير صحيح أو غير فعّال"; return; }
+    vals.coupon = c; repaint();
+  };
+}
+async function renderCouponsPanel(el){
+  if (!el) return;
+  const { data } = await supabaseClient.from("coupons").select("*").order("created_at", { ascending: false });
+  const list = data || [];
+  let type = "percent";
+  el.innerHTML = `<h3>كوبونات الخصم وبطاقات الهدايا</h3>
+    <p class="hint">الكوبون بنسبة مئوية، وبطاقة الهدية بمبلغ ثابت. يُدخل الزبون الكود عند إتمام الطلب فيُخصم من الإجمالي.</p>
+    <input class="plain-input" id="cpCode" placeholder="الكود (مثال: EID25)" dir="ltr">
+    <div class="size-row" id="cpTypeRow" style="margin-bottom:10px;padding:0;">
+      <button type="button" class="size-chip active" data-cptype="percent">نسبة %</button>
+      <button type="button" class="size-chip" data-cptype="fixed">مبلغ ثابت (بطاقة هدية)</button>
+    </div>
+    <input class="plain-input" id="cpValue" placeholder="القيمة" inputmode="numeric">
+    <div class="err" id="cpAdminErr" style="margin:-6px 0 10px;"></div>
+    <button class="primary-btn" id="cpAdd">+ إضافة</button>
+    <div style="margin-top:16px;">${list.length ? list.map(c => `<div class="cp-item">${ticketHtml(c, null)}<button class="del-btn" data-cpdel="${esc(c.id)}">🗑</button></div>`).join("") : '<p class="hint center">لا توجد كوبونات بعد.</p>'}</div>`;
+  el.querySelectorAll("[data-cptype]").forEach(b => b.onclick = () => {
+    type = b.dataset.cptype;
+    el.querySelectorAll("[data-cptype]").forEach(x => x.classList.toggle("active", x === b));
+  });
+  document.getElementById("cpAdd").onclick = async () => {
+    const err = document.getElementById("cpAdminErr");
+    const code = document.getElementById("cpCode").value.trim().toUpperCase();
+    const value = Number(normalizeDigits(document.getElementById("cpValue").value.trim()));
+    if (!/^[A-Z0-9_-]{3,20}$/.test(code)) { err.textContent = "الكود: 3-20 حرفًا إنجليزيًا أو أرقامًا"; return; }
+    if (!value || value <= 0 || (type === "percent" && value > 100)) { err.textContent = type === "percent" ? "النسبة بين 1 و100" : "أدخل مبلغًا صحيحًا"; return; }
+    if (list.some(c => c.code === code)) { err.textContent = "هذا الكود موجود مسبقًا"; return; }
+    const { error } = await supabaseClient.from("coupons").insert([{ code, type, value, active: true }]);
+    if (error) { err.textContent = "تعذر الحفظ: " + error.message; return; }
+    logActivity("إضافة كوبون", code);
+    showToast("تمت إضافة الكوبون");
+    renderCouponsPanel(el);
+  };
+  el.querySelectorAll("[data-cpdel]").forEach(b => b.onclick = async () => {
+    if (!(await holdConfirm("حذف هذا الكوبون؟"))) return;
+    const row = list.find(c => String(c.id) === b.dataset.cpdel);
+    await supabaseClient.from("coupons").delete().eq("id", b.dataset.cpdel);
+    logActivity("حذف كوبون", row && row.code);
+    renderCouponsPanel(el);
+    showUndoToast("تم حذف الكوبون", async () => { await supabaseClient.from("coupons").insert([row]); renderCouponsPanel(el); });
+  });
+}
+
+/* ---------- Receipt Printer: إيصال يُطبع عند نجاح الطلب ---------- */
+function receiptHtml(o){
+  const rows = o.items.map(i => {
+    const v = [i.colorName, i.size].filter(Boolean).join(" · ");
+    return `<div class="rc-row"><span>${esc(i.name)}${v ? ` <small>(${esc(v)})</small>` : ""} × ${i.qty}</span><b>${money(i.price * i.qty)}</b></div>`;
+  }).join("");
+  return `<div class="rc-wrap"><div class="rc-slot"></div><div class="receipt">
+    <div class="rc-head"><div class="rc-ok">✓</div><b>تم إرسال طلبك</b><span>QR CODE</span></div>
+    <div class="rc-meta"><span>رقم الطلب</span><b dir="ltr">${esc(o.ref)}</b></div>
+    <div class="rc-meta"><span>التاريخ</span><b>${new Date().toLocaleDateString("ar")}</b></div>
+    <div class="rc-sep"></div>${rows}<div class="rc-sep"></div>
+    ${o.discount ? `<div class="rc-row"><span>المجموع</span><b>${money(o.subtotal)}</b></div><div class="rc-row"><span>خصم (${esc(o.coupon.code)})</span><b>-${money(o.discount)}</b></div>` : ""}
+    <div class="rc-row rc-total"><span>الإجمالي</span><b>${money(o.total)} د.ع</b></div>
+    <div class="rc-bar"></div>
+  </div></div>`;
+}
+
+/* مراقب DOM: يفعّل التلاشي على أي قائمة جديدة تُرسم */
+const uiObserver = new MutationObserver(() => {
+  if (uiObserver.t) return;
+  uiObserver.t = requestAnimationFrame(() => { uiObserver.t = 0; initFadeLists(); updateFoil(); });
+});
+uiObserver.observe(document.body, { childList: true, subtree: true });

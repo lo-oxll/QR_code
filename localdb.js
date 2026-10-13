@@ -79,7 +79,8 @@
 
   const ref = o => String(o.id).slice(-6).toUpperCase();
   const digits = s => String(s || "").replace(/\D/g, "").slice(-9);
-  const findAdmin = (u, h) => mem.admins.find(a => a.username === u && a.password_hash === h);
+  const uq = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+  const findAdmin = (u, h) => mem.admins.find(a => uq(a.username, u) && a.password_hash === h);
   const owner = (u, h) => { const a = findAdmin(u, h); if (!a || a.role !== "owner") throw new Error("غير مصرح"); return a; };
   const staff = (u, h) => { if (!findAdmin(u, h)) throw new Error("غير مصرح"); };
 
@@ -101,11 +102,11 @@
     change_owner_password: async p => { const a = owner(p.p_owner_username, p.p_old_password_hash); a.password_hash = p.p_new_password_hash; await persist(); return null; },
     add_staff_admin: async p => {
       owner(p.p_owner_username, p.p_owner_password_hash);
-      if (mem.admins.some(a => a.username === p.p_new_username)) throw new Error("اسم المستخدم موجود");
+      if (mem.admins.some(a => uq(a.username, p.p_new_username))) throw new Error("اسم المستخدم موجود");
       mem.admins.push({ username: p.p_new_username, password_hash: p.p_new_password_hash, role: "staff", created_at: now() }); await persist(); return null;
     },
     list_staff_admins: async p => { owner(p.p_owner_username, p.p_owner_password_hash); return mem.admins.filter(a => a.role !== "owner").map(a => ({ username: a.username, created_at: a.created_at })); },
-    remove_staff_admin: async p => { owner(p.p_owner_username, p.p_owner_password_hash); mem.admins = mem.admins.filter(a => !(a.role !== "owner" && a.username === p.p_target_username)); await persist(); return null; }
+    remove_staff_admin: async p => { owner(p.p_owner_username, p.p_owner_password_hash); mem.admins = mem.admins.filter(a => !(a.role !== "owner" && uq(a.username, p.p_target_username))); await persist(); return null; }
   };
 
   const client = {

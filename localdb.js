@@ -12,15 +12,25 @@
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
   });
-  const idbGet = async () => { const d = await openDb(); return new Promise((res, rej) => { const q = d.transaction(STORE).objectStore(STORE).get(KEY); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); };
-  const idbSet = async v => { const d = await openDb(); return new Promise((res, rej) => { const t = d.transaction(STORE, "readwrite"); t.objectStore(STORE).put(v, KEY); t.oncomplete = res; t.onerror = () => rej(t.error); }); };
+  const LS = "qrcode:localdb";
+  const idbGet0 = async () => { const d = await openDb(); return new Promise((res, rej) => { const q = d.transaction(STORE).objectStore(STORE).get(KEY); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); };
+  const idbSet0 = async v => { const d = await openDb(); return new Promise((res, rej) => { const t = d.transaction(STORE, "readwrite"); t.objectStore(STORE).put(v, KEY); t.oncomplete = res; t.onerror = () => rej(t.error); }); };
+
+  const idbGet = async () => { try { return await idbGet0(); } catch (e) { try { return JSON.parse(localStorage.getItem(LS)); } catch { return null; } } };
+  const idbSet = async v => { try { await idbSet0(v); } catch (e) { localStorage.setItem(LS, JSON.stringify(v)); } };
 
   async function sha256Hex(text){
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
   }
   const clone = x => JSON.parse(JSON.stringify(x));
-  const uuid = () => crypto.randomUUID();
+  const uuid = () => {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+    const h = Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+  };
   const now = () => new Date().toISOString();
   const persist = () => idbSet(mem);
 

@@ -711,7 +711,7 @@ function renderStore(){
       const colors = parseColors(p);
       const activeColor = colors[vs.colorIdx] || null;
       addToCart(p, { colorName: activeColor?.name || null, size: vs.size || null });
-      showToast("أُضيف للسلة 🛒");
+      flashButton(btn, "✓ أُضيف للسلة");
       updateCartBadge();
     });
   });
@@ -1758,7 +1758,7 @@ function renderProductsTab(body){
     });
     list.querySelectorAll("[data-del]").forEach(b => {
       b.onclick = async () => {
-        const confirmDelete = confirm("هل أنت متأكد من حذف هذا المنتج؟");
+        const confirmDelete = await holdConfirm("حذف هذا المنتج؟");
         if (!confirmDelete) return;
         const pid = b.dataset.del;
 
@@ -2270,7 +2270,7 @@ function renderOrdersTab(body){
   if (isOwner) {
     body.querySelectorAll("[data-delorder]").forEach(b => {
       b.onclick = async () => {
-        if (!confirm("هل أنت متأكد من حذف هذا الطلب نهائيًا؟")) return;
+        if (!(await holdConfirm("حذف هذا الطلب نهائيًا؟"))) return;
         const oid = b.dataset.delorder;
         const orderBeforeDelete = state.orders.find(o => String(o.id) === String(oid));
         const refStr = orderBeforeDelete ? orderRef(orderBeforeDelete) : null;

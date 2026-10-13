@@ -262,3 +262,19 @@ h1.brand{font-size:clamp(26px,7vw,46px);margin:0;line-height:1;color:var(--ink);
 .grid .card:nth-child(4){animation-delay:.18s;}
 .grid .card:nth-child(5){animation-delay:.23s;}
 .grid .card:nth-child(6){animation-delay:.28s;}
+
+/* ===== Dynamic Button ===== */
+.book-btn{transition:background .25s, opacity .14s, transform .14s;}
+.book-btn.dyn-out{opacity:0;transform:translateY(-6px);}
+.book-btn.dyn-in{opacity:1;transform:translateY(0);}
+.book-btn.dyn-ok{background:var(--ok);}
+
+/* ===== Hold to Confirm ===== */
+.hold-ov{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;}
+.hold-box{background:var(--surface);color:var(--ink);border-radius:16px;padding:22px;width:100%;max-width:340px;text-align:center;font-family:'Cairo',sans-serif;}
+.hold-msg{font-weight:700;margin-bottom:16px;}
+.hold-btn{position:relative;overflow:hidden;width:100%;padding:14px;border:0;border-radius:12px;background:var(--card);color:var(--err);font:700 14px 'Cairo',sans-serif;cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+.hold-fill{position:absolute;inset:0;background:var(--err);transform:scaleX(0);transform-origin:right;}
+.hold-label{position:relative;mix-blend-mode:normal;}
+.hold-btn:active .hold-label{color:#fff;}
+.hold-cancel{margin-top:10px;background:none;border:0;color:var(--muted);font:600 13px 'Cairo',sans-serif;cursor:pointer;}

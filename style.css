@@ -440,3 +440,54 @@ h1.brand{font-size:clamp(26px,7vw,46px);margin:0;line-height:1;color:var(--ink);
 @keyframes tkDoor1{30%,50%{transform:rotate(32deg);}}
 @keyframes tkDoor2{30%,50%{transform:rotate(-32deg);}}
 @keyframes tkBox{8%,10%{transform:translateX(40px);opacity:1;}25%{transform:translateX(112px);opacity:1;}26%{transform:translateX(112px);opacity:0;}27%,100%{transform:translateX(0);opacity:0;}}
+
+/* ===== توحيد الأزرار بشكل احترافي: زوايا منحنية دائمًا (لا زوايا 90°) ===== */
+:root{--btn-r:14px;--btn-r-sm:12px;}
+
+/* الأزرار الأساسية والثانوية: ارتفاع موحّد، خط واضح، ظل ناعم، وتركيز بصري للوحة المفاتيح */
+.primary-btn,.dark-btn,.ghost-btn,.book-btn{
+  border-radius:var(--btn-r);min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px;
+  font-family:'Cairo',sans-serif;font-weight:700;letter-spacing:.01em;line-height:1.2;
+}
+label.ghost-btn{display:flex;}
+.ghost-btn{border-color:var(--line);color:var(--ink);background-color:var(--surface);}
+.ghost-btn:hover{border-color:var(--moss);color:var(--moss);}
+.primary-btn:hover:not(:disabled),.dark-btn:hover:not(:disabled),.book-btn:hover{
+  background-color:var(--moss);transform:translateY(-1px);
+}
+.primary-btn:active:not(:disabled),.dark-btn:active:not(:disabled),.book-btn:active{transform:translateY(var(--edge,2px));}
+
+/* أزرار صفوف الطلبات في لوحة المدير/المشرفين (واتساب، تأكيد، إلغاء، فاتورة، إيصال، حذف…) */
+.order-actions{gap:8px;}
+.order-actions button,
+.btn-confirm,.btn-cancel,.btn-whatsapp,.btn-instagram,.btn-delete{
+  border-radius:var(--btn-r-sm);min-height:40px;padding:9px 14px;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  font-family:'Cairo',sans-serif;font-size:12.5px;font-weight:700;letter-spacing:.01em;white-space:nowrap;
+}
+.order-actions button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.08);}
+.btn-delete{border-radius:var(--btn-r-sm);}
+
+/* التبويبات، الشرائح، الحذف، الإغلاق */
+.tab,.tab.active{border-radius:999px;}
+.size-chip{border-radius:999px;min-height:34px;padding:6px 14px;display:inline-flex;align-items:center;justify-content:center;}
+.del-btn{border-radius:var(--btn-r-sm);min-width:38px;min-height:38px;display:inline-flex;align-items:center;justify-content:center;}
+.close-x{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;transition:background .2s,color .2s;}
+.close-x:hover{background:var(--card);}
+.cp-remove{border-radius:8px;padding:4px 8px;}
+.undo-toast button{border-radius:999px;padding:4px 12px;background:rgba(156,193,255,.12);}
+.hold-btn{border-radius:var(--btn-r);}
+.hold-cancel{border-radius:var(--btn-r-sm);padding:8px 14px;}
+.upload-box{border-radius:var(--btn-r);}
+.qty-ctl button,.color-thumb button,.social-btn,.switch,.cart-top-btn,.fab,.color-dot{border-radius:50%;}
+
+/* أي زر آخر لم يُذكر أعلاه يحصل على زوايا منحنية بدل 90° (عدا الأزرار الدائرية والشاحنة) */
+button:not(.truck-btn):not(.color-dot):not(.switch):not(.cart-top-btn):not(.qty-ctl button):not(.color-thumb button):not(.close-x):not(.tab):not(.size-chip):not(.undo-toast button){
+  border-radius:var(--btn-r-sm);
+}
+.tab,.size-chip,.undo-toast button{border-radius:999px;}
+
+:is(.primary-btn,.dark-btn,.ghost-btn,.book-btn,.order-actions button,.tab,.size-chip,.del-btn,.close-x,.hold-btn):focus-visible{
+  outline:3px solid color-mix(in srgb,var(--moss) 45%,transparent);outline-offset:2px;
+}
+@media (prefers-reduced-motion:reduce){.primary-btn,.dark-btn,.book-btn,.order-actions button{transition:none;}}

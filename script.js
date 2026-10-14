@@ -1151,9 +1151,32 @@ function openCartCheckoutModal(){
   modalBg.classList.add("open");
 }
 
+/* ======================= زر «تم» بحركة الشاحنة (قابل لإعادة الاستخدام) =======================
+   truckBtnHtml(id) يُرجع HTML الزر، و bindTruckBtn(id, onDone) يشغّل الحركة عند النقر
+   ثم يستدعي onDone بعد انتهائها (5 ثوانٍ، نفس مدة keyframes في style.css) */
+function truckBtnHtml(id){
+  return `<button type="button" class="truck-btn" id="${id}">
+    <span class="default">تم</span>
+    <span class="success">تم <svg viewBox="0 0 12 10"><polyline points="1.5 6 4.5 9 10.5 1"></polyline></svg></span>
+    <div class="truck"><div class="back"></div><div class="front"><div class="window"></div></div><div class="light top"></div><div class="light bottom"></div></div>
+    <div class="lines"></div><div class="tk-box"></div>
+  </button>`;
+}
+function bindTruckBtn(id, onDone){
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  let started = false;
+  btn.onclick = () => {
+    if (started) return;
+    started = true;
+    btn.classList.add("animate");
+    setTimeout(onDone, 5000);
+  };
+}
+
 /* ======================= نافذة الطلب المخصص (بدون منتج محدد من الكتالوج) ======================= */
 function openCustomOrderModal(){
-  const vals = { name: "", governorate: "", city: "", phone: "", socialPlatform: "instagram", socialHandle: "", designImage: null, serviceType: "طباعة", desc: "" };
+  const vals = { name: "", governorate: "", city: "", phone: "", socialPlatform: "instagram", socialHandle: "", serviceType: "طباعة", desc: "" };
   const SERVICE_TYPES = ["طباعة", "تطريز", "سجاد Tufting", "باجات / أقلام", "أخرى"];
 
   function paint(){
@@ -1163,7 +1186,7 @@ function openCustomOrderModal(){
           <h2>اطلب تصميمك الخاص</h2>
           <button class="close-x" id="closeModal">✕</button>
         </div>
-        <p class="hint" style="margin:-6px 0 14px;">اشرح لنا فكرتك، أرفق تصميمك أو صورة مرجعية إن وُجدت، وسنتواصل معك لتحديد السعر وتفاصيل التنفيذ.</p>
+        <p class="hint" style="margin:-6px 0 14px;">اشرح لنا فكرتك وسنتواصل معك لتحديد السعر وتفاصيل التنفيذ.</p>
 
         <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">نوع الخدمة</p>
         <div class="size-row" id="serviceTypeRow" style="margin-bottom:14px;">
@@ -1172,15 +1195,6 @@ function openCustomOrderModal(){
 
         <textarea class="plain-textarea" id="fCustomDesc" placeholder="اشرح طلبك (المقاس، الكمية، الألوان، أي تفاصيل مهمة...)" rows="3">${esc(vals.desc)}</textarea>
         <div class="err" id="errDesc" style="margin:-6px 0 10px;"></div>
-
-        <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">تصميمك أو صورة مرجعية (اختياري)</p>
-        <input type="file" id="fDesign" accept="image/*" style="display:none">
-        ${vals.designImage ? `
-          <div style="position:relative;width:84px;margin-bottom:10px;">
-            <img src="${esc(vals.designImage)}" style="width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--line);display:block;">
-            <button type="button" id="removeDesign" style="position:absolute;top:-6px;left:-6px;width:22px;height:22px;border-radius:50%;background:var(--onyx);color:#fff;border:0;cursor:pointer;font-size:12px;line-height:1;">✕</button>
-          </div>
-        ` : `<label class="ghost-btn" id="designLabel" style="display:block;text-align:center;cursor:pointer;margin-bottom:14px;">🎨 إرفاق صورة</label>`}
 
         <input id="fWebsite" type="text" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true">
         <div class="field"><div class="box">👤<input id="fName" placeholder="الاسم الكامل" value="${esc(vals.name)}"></div><div class="err" id="errName"></div></div>
@@ -1212,26 +1226,6 @@ function openCustomOrderModal(){
       chip.onclick = () => { vals.socialPlatform = chip.dataset.socialPlatform; paint(); };
     });
 
-    const designLabel = document.getElementById("designLabel");
-    if (designLabel) designLabel.onclick = () => document.getElementById("fDesign").click();
-    document.getElementById("fDesign").onchange = async (e) => {
-      const f = e.target.files[0];
-      if (!f) return;
-      // معاينة فورية أثناء الرفع
-      vals.designImage = URL.createObjectURL(f);
-      paint();
-      try {
-        const blob = await resizeImageToBlob(f, 900, 0.8);
-        vals.designImage = await uploadImageToStorage(blob, "designs");
-      } catch (err) {
-        console.error("design image upload error", err);
-        showToast("تعذر رفع الصورة", "err");
-        vals.designImage = null;
-      }
-      paint();
-    };
-    const removeDesignBtn = document.getElementById("removeDesign");
-    if (removeDesignBtn) removeDesignBtn.onclick = () => { vals.designImage = null; paint(); };
   }
 
   async function submit(){
@@ -1268,7 +1262,6 @@ function openCustomOrderModal(){
           instagram_username: encodeSocial(vals.socialPlatform, socialHandle),
           qty: 1,
           total: null,
-          design_image: vals.designImage || null,
           custom_request: desc
         }
       ])
@@ -1288,7 +1281,7 @@ function openCustomOrderModal(){
     const num = formatWhatsapp(state.settings.whatsapp);
     if (num){
       const socialLine = socialHandle ? `\n${SOCIAL_PLATFORMS[vals.socialPlatform].label}: ${socialUrl(vals.socialPlatform, socialHandle)}` : "";
-      const msg = `طلب مخصص جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${socialLine}${vals.designImage ? `\n🎨 صورة التصميم/المرجع: ${vals.designImage}` : ""}`;
+      const msg = `طلب مخصص جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nنوع الخدمة: ${vals.serviceType}\nالتفاصيل: ${desc}\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${socialLine}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 
       modalBg.querySelector(".modal").innerHTML = `
@@ -1297,13 +1290,15 @@ function openCustomOrderModal(){
           <h2 style="margin-bottom:4px;">تم إرسال طلبك</h2>
           <p style="font-weight:800;font-size:15px;margin-bottom:10px;">رقم طلبك: ${orderRef(inserted)}</p>
           <p class="hint" style="margin-bottom:22px;">اضغط "تم" لفتح محادثة واتساب بتفاصيل طلبك — أرسلها وسنتواصل معك لتحديد السعر وتأكيد التنفيذ. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
-          <button class="primary-btn" id="closeWaitBtn">تم</button>
+          ${truckBtnHtml("closeWaitBtn")}
         </div>
       `;
-      document.getElementById("closeWaitBtn").onclick = () => {
-        window.open(waUrl, "_blank");
+      // واتساب يُفتح بعد انتهاء حركة الشاحنة؛ إن حجب المتصفح النافذة ننتقل للرابط مباشرة
+      bindTruckBtn("closeWaitBtn", () => {
+        const w = window.open(waUrl, "_blank");
         closeModal(); render();
-      };
+        if (!w) location.href = waUrl;
+      });
       return;
     }
     showToast(`تم إرسال طلبك بنجاح — رقم طلبك: ${orderRef(inserted)}`);

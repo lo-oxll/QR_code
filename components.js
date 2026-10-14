@@ -251,21 +251,81 @@ async function renderCouponsPanel(el){
   });
 }
 
-/* ---------- Receipt Printer: إيصال يُطبع عند نجاح الطلب ---------- */
+/* ---------- Receipt Printer (منقول من dqnamo.com/experiments/receipt-printer): معالجة ← طباعة ← اكتمال ---------- */
 function receiptHtml(o){
   const rows = o.items.map(i => {
     const v = [i.colorName, i.size].filter(Boolean).join(" · ");
-    return `<div class="rc-row"><span>${esc(i.name)}${v ? ` <small>(${esc(v)})</small>` : ""} × ${i.qty}</span><b>${money(i.price * i.qty)}</b></div>`;
+    return `<div class="rcp-item"><div class="rcp-iname">${esc(i.name)}${v ? `<small>${esc(v)}</small>` : ""}</div><div class="rcp-iqty">× ${i.qty}</div><div class="rcp-iprice">${money(i.price * i.qty)}</div></div>`;
   }).join("");
-  return `<div class="rc-wrap"><div class="rc-slot"></div><div class="receipt">
-    <div class="rc-head"><div class="rc-ok">✓</div><b>تم إرسال طلبك</b><span>QR CODE</span></div>
-    <div class="rc-meta"><span>رقم الطلب</span><b dir="ltr">${esc(o.ref)}</b></div>
-    <div class="rc-meta"><span>التاريخ</span><b>${new Date().toLocaleDateString("ar")}</b></div>
-    <div class="rc-sep"></div>${rows}<div class="rc-sep"></div>
-    ${o.discount ? `<div class="rc-row"><span>المجموع</span><b>${money(o.subtotal)}</b></div><div class="rc-row"><span>خصم (${esc(o.coupon.code)})</span><b>-${money(o.discount)}</b></div>` : ""}
-    <div class="rc-row rc-total"><span>الإجمالي</span><b>${money(o.total)} د.ع</b></div>
-    <div class="rc-bar"></div>
-  </div></div>`;
+  const meta = (k, v) => v ? `<div class="rcp-meta"><span>${k}</span><b>${esc(v)}</b></div>` : "";
+  return `<section class="rcp" data-stage="processing" aria-label="طابعة الفواتير">
+    <div class="rcp-machine">
+      <div class="rcp-header"><span class="rcp-brand">QR CODE</span><span class="rcp-led"></span></div>
+      <div class="rcp-screen"><div class="rcp-status" role="status" aria-live="polite">
+        <span class="rcp-ind" aria-hidden="true"><i class="rcp-spin"></i><i class="rcp-check">✓</i></span>
+        <span class="rcp-label"></span></div></div>
+      <div class="rcp-slot" aria-hidden="true"></div>
+    </div>
+    <div class="rcp-output">
+      <div class="rcp-topshadow" aria-hidden="true"></div>
+      <div class="rcp-feed"><article class="rcp-paper">
+        <div class="rcp-title"><b>QR CODE</b><span>فاتورة طلب</span></div>
+        <div class="rcp-sep"></div>
+        ${meta("رقم الطلب", o.ref)}${meta("التاريخ", new Date().toLocaleString("ar", { dateStyle: "short", timeStyle: "short" }))}
+        ${meta("الاسم", o.name)}${meta("الهاتف", o.phone)}${meta("الموقع", o.loc)}
+        <div class="rcp-sep"></div>${rows}<div class="rcp-sep"></div>
+        ${o.discount ? `<div class="rcp-meta"><span>المجموع</span><b>${money(o.subtotal)}</b></div><div class="rcp-meta"><span>خصم (${esc(o.coupon.code)})</span><b>-${money(o.discount)}</b></div>` : ""}
+        <div class="rcp-meta rcp-total"><span>الإجمالي</span><b>${money(o.total)} د.ع</b></div>
+        <div class="rcp-bar" aria-hidden="true"></div>
+        <p class="rcp-thanks">شكرًا لثقتكم ♥</p>
+      </article></div>
+    </div>
+  </section>`;
+}
+function receiptText(o){
+  const lines = ["فاتورة طلب — QR CODE", "رقم الطلب: " + o.ref, "التاريخ: " + new Date().toLocaleString("ar", { dateStyle: "short", timeStyle: "short" })];
+  if (o.name) lines.push("الاسم: " + o.name);
+  if (o.phone) lines.push("الهاتف: " + o.phone);
+  if (o.loc) lines.push("الموقع: " + o.loc);
+  lines.push("------------------");
+  o.items.forEach(i => lines.push(`${i.name}${[i.colorName, i.size].filter(Boolean).length ? " (" + [i.colorName, i.size].filter(Boolean).join(" · ") + ")" : ""} × ${i.qty} — ${money(i.price * i.qty)}`));
+  lines.push("------------------");
+  if (o.discount) lines.push(`خصم (${o.coupon.code}): -${money(o.discount)}`);
+  lines.push("الإجمالي: " + money(o.total) + " د.ع");
+  return lines.join("\n");
+}
+async function copyText(t){
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch {
+    try { const x = document.createElement("textarea"); x.value = t; x.style.cssText = "position:fixed;opacity:0"; document.body.appendChild(x); x.select(); const ok = document.execCommand("copy"); x.remove(); return ok; }
+    catch { return false; }
+  }
+}
+function runReceiptStages(root, done){
+  const label = root.querySelector(".rcp-label");
+  const L = { processing: "جارٍ معالجة طلبك", printing: "جارٍ طباعة الفاتورة", complete: "اكتمل الطلب" };
+  const set = st => { root.dataset.stage = st; label.textContent = L[st]; label.classList.remove("rcp-in"); void label.offsetWidth; label.classList.add("rcp-in"); };
+  set("processing");
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { set("complete"); done(); return; }
+  setTimeout(() => { set("printing"); setTimeout(() => { set("complete"); done(); }, 1800); }, 1300);
+}
+/* شاشة نجاح الطلب: الإيصال يُطبع أولًا، وبعد اكتماله تظهر أزرار النسخ والمتابعة (لقطة الشاشة تُؤخذ من الفاتورة الكاملة) */
+function showReceiptScreen(o, waUrl, onDone){
+  const modal = modalBg.querySelector(".modal");
+  modal.innerHTML = `<div class="center" style="padding:6px 0;">
+    ${receiptHtml(o)}
+    <div class="rcp-actions" id="rcpActions">
+      <button type="button" class="ghost-btn" id="rcpCopy">📋 نسخ الفاتورة</button>
+      <p class="hint">${waUrl ? "خذ لقطة شاشة للفاتورة ثم اضغط «تم» لفتح واتساب وأرسلها مع رسالة الطلب." : "خذ لقطة شاشة للفاتورة واحتفظ برقم الطلب لمتابعة حالته لاحقًا."}</p>
+      <button class="primary-btn" id="closeWaitBtn">تم</button>
+    </div></div>`;
+  document.getElementById("rcpCopy").onclick = async function(){
+    const ok = await copyText(receiptText(o));
+    this.textContent = ok ? "✓ تم نسخ الفاتورة" : "تعذر النسخ";
+    setTimeout(() => { this.textContent = "📋 نسخ الفاتورة"; }, 2000);
+  };
+  document.getElementById("closeWaitBtn").onclick = onDone;
+  runReceiptStages(modal.querySelector(".rcp"), () => document.getElementById("rcpActions").classList.add("show"));
 }
 
 /* مراقب DOM: يفعّل التلاشي على أي قائمة جديدة تُرسم */

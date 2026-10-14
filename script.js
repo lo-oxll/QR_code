@@ -1135,29 +1135,14 @@ function openCartCheckoutModal(){
       const msg = `حجز جديد من QR CODE\nرقم الطلب: ${orderRef(inserted)}\nالمنتجات:\n${productSummary}${discount ? `\nكود الخصم: ${vals.coupon.code} (-${discount} د.ع)` : ""}\nالسعر الإجمالي: ${total} د.ع\nاسم العميل: ${name}\nالموقع: ${loc}\nرقم الهاتف: ${phone}${socialLine}`;
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 
-      // نعرض رسالة النجاح أولًا داخل المودال، وفقط عند ضغط الزبون على "تم" نفتح واتساب —
-      // بنقرة مستخدم مباشرة، فلا تظهر أي علامة تبويب about:blank فارغة إطلاقًا
-      modalBg.querySelector(".modal").innerHTML = `
-        <div class="center" style="padding:6px 0;">
-          ${receiptHtml({ ref: orderRef(inserted), items: cartItems, subtotal, discount, total, coupon: vals.coupon })}
-          <p class="hint" style="margin-bottom:22px;">اضغط "تم" لفتح محادثة واتساب برسالة تحتوي كل تفاصيل طلبك — أرسلها وانتظر رد المتجر لتأكيد الحجز. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
-          <button class="primary-btn" id="closeWaitBtn">تم</button>
-        </div>
-      `;
-      document.getElementById("closeWaitBtn").onclick = () => {
+      // الإيصال يُطبع أولًا، وبعد اكتماله يضغط الزبون "تم" فيُفتح واتساب (بنقرة مباشرة، فلا تظهر تبويبات فارغة)
+      showReceiptScreen({ ref: orderRef(inserted), items: cartItems, subtotal, discount, total, coupon: vals.coupon, name, phone, loc }, waUrl, () => {
         window.open(waUrl, "_blank");
         closeModal(); render();
-      };
+      });
       return;
     }
-    modalBg.querySelector(".modal").innerHTML = `
-      <div class="center" style="padding:6px 0;">
-        ${receiptHtml({ ref: orderRef(inserted), items: cartItems, subtotal, discount, total, coupon: vals.coupon })}
-        <p class="hint" style="margin-bottom:22px;">احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
-        <button class="primary-btn" id="closeWaitBtn">تم</button>
-      </div>
-    `;
-    document.getElementById("closeWaitBtn").onclick = () => { closeModal(); render(); };
+    showReceiptScreen({ ref: orderRef(inserted), items: cartItems, subtotal, discount, total, coupon: vals.coupon, name, phone, loc }, null, () => { closeModal(); render(); });
   }
 
   paint();

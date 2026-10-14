@@ -309,6 +309,21 @@ function runReceiptStages(root, done){
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { set("complete"); done(); return; }
   setTimeout(() => { set("printing"); setTimeout(() => { set("complete"); done(); }, 1800); }, 1300);
 }
+/* زر «تم» بحركة الشاحنة: يشغّل الحركة (5 ثوانٍ) ثم ينفّذ onFinish (فتح واتساب وإغلاق النافذة).
+   التنسيقات في style.css تحت .truck-btn. مع تفعيل «تقليل الحركة» في الجهاز يُنفَّذ onFinish فورًا بدون حركة. */
+const TRUCK_MS = 5200;
+function truckBtnHtml(id, label, successLabel){
+  return `<button type="button" class="truck-btn" id="${id}"><span class="default">${label}</span><span class="success">${successLabel}<svg viewBox="0 0 12 10"><polyline points="1.5 6 4.5 9 10.5 1"></polyline></svg></span><div class="tk-box"></div><div class="truck"><div class="back"></div><div class="front"><div class="window"></div></div><div class="light top"></div><div class="light bottom"></div></div><div class="lines"></div></button>`;
+}
+function bindTruckBtn(btn, onFinish){
+  btn.onclick = () => {
+    if (btn.dataset.busy) return; // يمنع الضغط المتكرر (فتح واتساب مرتين)
+    btn.dataset.busy = "1";
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { onFinish(); return; }
+    btn.classList.add("animate");
+    setTimeout(onFinish, TRUCK_MS);
+  };
+}
 /* شاشة نجاح الطلب: الإيصال يُطبع أولًا، وبعد اكتماله تظهر أزرار النسخ والمتابعة (لقطة الشاشة تُؤخذ من الفاتورة الكاملة) */
 function showReceiptScreen(o, waUrl, onDone){
   const modal = modalBg.querySelector(".modal");
@@ -317,14 +332,14 @@ function showReceiptScreen(o, waUrl, onDone){
     <div class="rcp-actions" id="rcpActions">
       <button type="button" class="ghost-btn" id="rcpCopy">📋 نسخ الفاتورة</button>
       <p class="hint">${waUrl ? "خذ لقطة شاشة للفاتورة ثم اضغط «تم» لفتح واتساب وأرسلها مع رسالة الطلب." : "خذ لقطة شاشة للفاتورة واحتفظ برقم الطلب لمتابعة حالته لاحقًا."}</p>
-      <button class="primary-btn" id="closeWaitBtn">تم</button>
+      ${truckBtnHtml("closeWaitBtn", "تم", waUrl ? "تم الإرسال" : "تم")}
     </div></div>`;
   document.getElementById("rcpCopy").onclick = async function(){
     const ok = await copyText(receiptText(o));
     this.textContent = ok ? "✓ تم نسخ الفاتورة" : "تعذر النسخ";
     setTimeout(() => { this.textContent = "📋 نسخ الفاتورة"; }, 2000);
   };
-  document.getElementById("closeWaitBtn").onclick = onDone;
+  bindTruckBtn(document.getElementById("closeWaitBtn"), onDone);
   runReceiptStages(modal.querySelector(".rcp"), () => document.getElementById("rcpActions").classList.add("show"));
 }
 

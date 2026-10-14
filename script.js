@@ -1136,9 +1136,11 @@ function openCartCheckoutModal(){
       const waUrl = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 
       // الإيصال يُطبع أولًا، وبعد اكتماله يضغط الزبون "تم" فيُفتح واتساب (بنقرة مباشرة، فلا تظهر تبويبات فارغة)
+      // واتساب يُفتح بعد انتهاء حركة الشاحنة (خارج لحظة النقر)، وبعض المتصفحات (خاصة iOS) تحجب window.open هنا — فإن حُجب ننتقل للرابط مباشرة
       showReceiptScreen({ ref: orderRef(inserted), items: cartItems, subtotal, discount, total, coupon: vals.coupon, name, phone, loc }, waUrl, () => {
-        window.open(waUrl, "_blank");
+        const w = window.open(waUrl, "_blank");
         closeModal(); render();
+        if (!w) location.href = waUrl;
       });
       return;
     }

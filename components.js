@@ -176,6 +176,14 @@ function couponDiscount(c, sub){
 async function findCoupon(code){
   const k = String(code || "").trim().toUpperCase();
   if (!k) return null;
+  if (!state.currentAdmin) {
+    const pub = await loadPublished();
+    if (pub && Array.isArray(pub.coupons)) {
+      const h = await sha256Hex(k);
+      const m = pub.coupons.find(x => x.code_hash === h);
+      return m ? { code: k, type: m.type, value: m.value } : null;
+    }
+  }
   const { data } = await supabaseClient.from("coupons").select("*").eq("code", k);
   const c = (data || [])[0];
   return c && c.active !== false ? c : null;

@@ -235,6 +235,14 @@ function showOneTimeCredentials(username, password){
 
 /* ======================= الإعدادات (متزامنة عبر Supabase) ======================= */
 async function loadSettings(){
+  if (!state.currentAdmin) {
+    const pub = await loadPublished();
+    if (pub && pub.settings) {
+      const d = pub.settings;
+      state.settings = { whatsapp: d.whatsapp || "", eyebrow: d.eyebrow || DEFAULT_EYEBROW, lede: d.lede || DEFAULT_LEDE, logo: d.logo || "", policies: d.policies || DEFAULT_POLICIES, aboutUs: d.about_us || DEFAULT_ABOUT };
+      return;
+    }
+  }
   try {
     const { data, error } = await supabaseClient
       .from('settings')
@@ -1372,6 +1380,7 @@ function renderAdminLogin(){
       if (data && data.length > 0) {
         state.currentAdmin = { username: data[0].username, role: data[0].role, passwordHash: hash };
         document.getElementById("loginErr").textContent = "";
+        await Promise.all([loadProducts(), loadSettings()]);
         state.view = "admin";
         state.adminTab = data[0].role === "owner" ? "products" : "orders";
         await loadOrders();
@@ -1422,13 +1431,14 @@ function renderAdmin(){
       <div id="adminBody"></div>
     </div>
   `;
-  document.getElementById("logoutBtn").onclick = () => {
-    logActivity("تسجيل خروج");
+  document.getElementById("logoutBtn").onclick = async () => {
+    await logActivity("تسجيل خروج");
     stopOrderPolling();
     state.newOrdersCount = 0;
     document.title = "QR CODE | طباعة · تطريز · ليزر";
     state.currentAdmin = null;
     state.view = "store";
+    await Promise.all([loadProducts(), loadSettings()]);
     render();
   };
   app.querySelectorAll("[data-tab]").forEach(btn=>{
@@ -1708,7 +1718,7 @@ function renderProductsTab(body){
       return;
     }
 
-    showToast("تمت إضافة المنتج بنجاح");
+    showToast("تمت إضافة المنتج — اضغط «نشر» من الإعدادات ليظهر للجميع");
     logActivity("إضافة منتج", name);
     await loadProducts();
     renderAdmin();
@@ -2351,6 +2361,7 @@ function renderSettingsTab(body){
       <div class="err" id="waErr" style="margin:-6px 0 10px;color:var(--err);font-size:12px;"></div>
       <button class="primary-btn" id="saveWa">حفظ</button>
     </div>
+    <div class="panel" id="publishPanel"></div>
     <div class="panel" id="couponsPanel"></div>
     <div class="panel">
       <h3>نسخة احتياطية</h3>
@@ -2379,6 +2390,7 @@ function renderSettingsTab(body){
       <button class="dark-btn" id="savePw">حفظ كلمة المرور</button>
     </div>
   `;
+  renderPublishPanel(document.getElementById("publishPanel"));
   renderCouponsPanel(document.getElementById("couponsPanel"));
 
   let pendingLogo = state.settings.logo || "";
@@ -2630,6 +2642,10 @@ async function renderAdminsTab(body){
 
 /* ======================= جلب البيانات من Supabase ======================= */
 async function loadProducts(){
+  if (!state.currentAdmin) {
+    const pub = await loadPublished();
+    if (pub && Array.isArray(pub.products)) { state.products = pub.products; return; }
+  } else { try { await seedFromPublished(); } catch (e) { console.error("seed error", e); } }
   try {
     const { data: dbProducts, error: prodErr } = await supabaseClient
       .from('products')

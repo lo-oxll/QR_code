@@ -9,7 +9,7 @@
    المخزّنة بالكاش حتى لو رفعت التعديل الجديد فعليًا على GitHub.
 ========================================================================= */
 
-const CACHE_NAME = "qrcode-static-v9";
+const CACHE_NAME = "qrcode-static-v10";
 
 // الملفات الثابتة فقط (لا تتغير كثيرًا) — يُحدَّث رقم النسخة أعلاه عند أي تعديل بها لإجبار تحديث الكاش
 const STATIC_ASSETS = [
@@ -18,6 +18,7 @@ const STATIC_ASSETS = [
   "./style.css",
   "./localdb.js",
   "./components.js",
+  "./publish.js",
   "./script.js",
   "./manifest.json",
   "./logo.png",

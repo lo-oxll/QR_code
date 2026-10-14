@@ -1289,7 +1289,8 @@ function openCustomOrderModal(){
           <div class="seal" style="margin:0 auto 16px;">✓</div>
           <h2 style="margin-bottom:4px;">تم إرسال طلبك</h2>
           <p style="font-weight:800;font-size:15px;margin-bottom:10px;">رقم طلبك: ${orderRef(inserted)}</p>
-          <p class="hint" style="margin-bottom:22px;">اضغط "تم" لفتح محادثة واتساب بتفاصيل طلبك — أرسلها وسنتواصل معك لتحديد السعر وتأكيد التنفيذ. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
+          <p class="hint" style="margin-bottom:12px;">اضغط "تم" لفتح محادثة واتساب بتفاصيل طلبك — أرسلها وسنتواصل معك لتحديد السعر وتأكيد التنفيذ. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
+          <p style="margin:0 0 22px;padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:13px;font-weight:700;line-height:1.8;">🎨 بعد إرسال الرسالة، أرسل التصميم أو الصورة المرجعية في نفس محادثة واتساب.</p>
           ${truckBtnHtml("closeWaitBtn")}
         </div>
       `;

@@ -510,3 +510,32 @@ button:not(.truck-btn):not(.color-dot):not(.switch):not(.cart-top-btn):not(.qty-
 /* الوضع الليلي: الكل داكن والمختار فاتح */
 [data-theme="dark"] .size-chip{background-color:#1B2030;color:#EDEFF3;border:1px solid #2E3550;}
 [data-theme="dark"] .size-chip.active{background-color:#FFFFFF;color:#0E1116;border-color:#FFFFFF;}
+
+/* ===== أزرار الحجوزات (لوحة المدير/المشرفين): أزرق موحّد بنفس لون «اطلب تصميمك الخاص» في الوضعين ===== */
+.order-actions button,
+.order-actions .btn-confirm,.order-actions .btn-cancel,.order-actions .btn-whatsapp,
+.order-actions .btn-instagram,.order-actions .btn-delete,
+[data-theme="dark"] .order-actions button{
+  background:var(--moss);background-image:none;color:#fff;border:2px solid var(--moss) !important;
+  border-radius:var(--btn-r-sm);min-height:42px;font-weight:700;
+  box-shadow:0 3px 0 rgba(0,0,0,.28),0 6px 14px rgba(27,58,107,.22);
+  transition:transform .09s,box-shadow .09s,background-color .2s,border-color .2s;
+}
+.order-actions button:hover:not(:disabled),
+[data-theme="dark"] .order-actions button:hover:not(:disabled){
+  background:var(--moss-dark);border-color:var(--moss-dark) !important;filter:none;transform:translateY(-1px);
+}
+.order-actions button:active:not(:disabled){transform:translateY(3px);box-shadow:0 0 0 rgba(0,0,0,.28);}
+.order-actions button:disabled{opacity:.55;box-shadow:none;}
+
+/* ===== «إلغاء» و«حذف» يبقيان أحمرين (الوضعين النهاري والليلي) ===== */
+.order-actions .btn-cancel,[data-theme="dark"] .order-actions .btn-cancel,
+.order-actions .btn-delete,[data-theme="dark"] .order-actions .btn-delete{
+  background:var(--err);border-color:var(--err) !important;color:#fff;
+  box-shadow:0 3px 0 rgba(0,0,0,.28),0 6px 14px rgba(179,38,30,.22);
+}
+.order-actions .btn-cancel:hover:not(:disabled),[data-theme="dark"] .order-actions .btn-cancel:hover:not(:disabled),
+.order-actions .btn-delete:hover:not(:disabled),[data-theme="dark"] .order-actions .btn-delete:hover:not(:disabled){
+  background:color-mix(in srgb,var(--err) 85%,#000);border-color:color-mix(in srgb,var(--err) 85%,#000) !important;
+}
+.order-actions .btn-cancel:active:not(:disabled),.order-actions .btn-delete:active:not(:disabled){box-shadow:0 0 0 rgba(0,0,0,.28);}

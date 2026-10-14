@@ -491,3 +491,22 @@ button:not(.truck-btn):not(.color-dot):not(.switch):not(.cart-top-btn):not(.qty-
   outline:3px solid color-mix(in srgb,var(--moss) 45%,transparent);outline-offset:2px;
 }
 @media (prefers-reduced-motion:reduce){.primary-btn,.dark-btn,.book-btn,.order-actions button{transition:none;}}
+
+/* ===== زر «اطلب تصميمك الخاص»: لون واحد ثابت (كحلي) بزوايا منحنية ===== */
+#customOrderBtn{
+  background:var(--moss);background-image:none;color:#fff;border:2px solid var(--moss);
+  border-radius:var(--btn-r);min-height:50px;font-size:15px;font-weight:700;
+  box-shadow:0 3px 0 rgba(0,0,0,.28),0 8px 18px rgba(27,58,107,.25);
+}
+#customOrderBtn:hover{background:var(--moss-dark);border-color:var(--moss-dark);color:#fff;transform:translateY(-1px);}
+#customOrderBtn:active{transform:translateY(3px);box-shadow:0 0 0 rgba(0,0,0,.28);}
+[data-theme="dark"] #customOrderBtn{background:var(--moss);border-color:var(--moss);color:#fff;}
+[data-theme="dark"] #customOrderBtn:hover{background:var(--moss-dark);border-color:var(--moss-dark);}
+
+/* ===== المقاسات/الشرائح ===== */
+/* الوضع النهاري: الكل فاتح والمختار داكن */
+.size-chip{background-color:#FFFFFF;background-image:none;color:var(--ink);border:1px solid var(--line);}
+.size-chip.active{background-color:var(--onyx);color:#FFFFFF;border-color:var(--onyx);}
+/* الوضع الليلي: الكل داكن والمختار فاتح */
+[data-theme="dark"] .size-chip{background-color:#1B2030;color:#EDEFF3;border:1px solid #2E3550;}
+[data-theme="dark"] .size-chip.active{background-color:#FFFFFF;color:#0E1116;border-color:#FFFFFF;}

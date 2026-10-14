@@ -19,7 +19,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:'Cairo',sans-ser
 
 /* عرض الواجهة يتكيّف تلقائيًا: 50% من الشاشة على الأجهزة الكبيرة (حاسوب/تابلت أفقي)،
    و100% على الجوال حتى يبقى قابلاً للاستخدام على شاشة صغيرة */
-.wrap{width:100%;max-width:1100px;margin:0 auto;padding:0 20px 100px;}
+.wrap{width:100%;max-width:1100px;margin:0 auto;padding:0 20px 170px;}
 @media (min-width:900px){ .wrap{width:50%;} }
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
@@ -118,7 +118,8 @@ h1.brand{font-size:clamp(26px,7vw,46px);margin:0;line-height:1;color:var(--ink);
 
 /* شريط علوي ثابت: مفتاح الوضع الليلي/النهاري + زر السلة بجانبه — تفضيل الوضع محفوظ بهذا المتصفح فقط */
 .top-bar{
-  position:fixed;top:14px;inset-inline-start:14px;display:flex;align-items:center;gap:12px;z-index:41;
+  position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));right:14px;left:auto;top:auto;
+  display:flex;flex-direction:column-reverse;align-items:center;gap:12px;z-index:41;
 }
 .switch{
   position:relative;width:64px;height:64px;border-radius:50%;flex-shrink:0;

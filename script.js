@@ -1718,7 +1718,7 @@ function renderProductsTab(body){
       return;
     }
 
-    showToast("تمت إضافة المنتج — اضغط «نشر» من الإعدادات ليظهر للجميع");
+    showToast("تمت إضافة المنتج — لينشر للجميع: الإعدادات ← تنزيل ملف النشر");
     logActivity("إضافة منتج", name);
     await loadProducts();
     renderAdmin();

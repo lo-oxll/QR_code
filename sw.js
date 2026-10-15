@@ -9,7 +9,7 @@
    المخزّنة بالكاش حتى لو رفعت التعديل الجديد فعليًا على GitHub.
 ========================================================================= */
 
-const CACHE_NAME = "qrcode-static-v16";
+const CACHE_NAME = "qrcode-static-v17";
 
 // الملفات الثابتة فقط (لا تتغير كثيرًا) — يُحدَّث رقم النسخة أعلاه عند أي تعديل بها لإجبار تحديث الكاش
 const STATIC_ASSETS = [
@@ -58,7 +58,7 @@ self.addEventListener("fetch", (event) => {
   // نفس الأصل فقط (ملفات الموقع الثابتة) — نطبّق: شبكة أولًا (دائمًا أحدث نسخة)، والكاش كنسخة احتياطية عند انقطاع الإنترنت
   if (url.origin === self.location.origin) {
     event.respondWith(
-      fetch(req)
+      fetch(req, { cache: "no-cache" })
         .then((res) => {
           if (res && res.ok) {
             const clone = res.clone();

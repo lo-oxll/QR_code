@@ -12,7 +12,7 @@
   --silver:#C7CCD3; --silver-dark:#9AA1AB;
   --btn-border:#FFFFFF; /* إطار أبيض بارز على الأزرار في الوضع الليلي */
 }
-html{touch-action:pan-x pan-y;} /* يمنع التكبير بإيماءة البينش مع إبقاء التمرير العادي شغالاً */
+ /* يمنع التكبير بإيماءة البينش مع إبقاء التمرير العادي شغالاً */
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Cairo',sans-serif;-webkit-font-smoothing:antialiased;transition:background .25s ease, color .25s ease;}
 .display{font-family:'Poppins','Cairo',sans-serif;font-weight:800;letter-spacing:.03em;}
@@ -539,3 +539,6 @@ button:not(.truck-btn):not(.color-dot):not(.switch):not(.cart-top-btn):not(.qty-
   background:color-mix(in srgb,var(--err) 85%,#000);border-color:color-mix(in srgb,var(--err) 85%,#000) !important;
 }
 .order-actions .btn-cancel:active:not(:disabled),.order-actions .btn-delete:active:not(:disabled){box-shadow:0 0 0 rgba(0,0,0,.28);}
+
+/* وصول: حلقة تركيز واضحة لكل العناصر عند التنقل بلوحة المفاتيح */
+:focus-visible{outline:2px solid var(--moss);outline-offset:2px;}

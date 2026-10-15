@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://lo-oxll.github.io/QR_code/sitemap.xml

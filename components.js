@@ -351,3 +351,46 @@ const uiObserver = new MutationObserver(() => {
   uiObserver.t = requestAnimationFrame(() => { uiObserver.t = 0; initFadeLists(); updateFoil(); });
 });
 uiObserver.observe(document.body, { childList: true, subtree: true });
+
+
+/* ---------- وصول: Esc لإغلاق النوافذ، حبس التركيز، role=dialog ---------- */
+document.addEventListener("keydown", e => {
+  const hc = document.querySelector(".hold-cancel");
+  if (e.key === "Escape") {
+    if (hc) { hc.click(); return; }
+    const bg = document.getElementById("modalBg");
+    if (bg && bg.innerHTML.trim() && typeof closeModal === "function") closeModal();
+    return;
+  }
+  if (e.key !== "Tab") return;
+  const box = document.querySelector(".hold-box") || document.querySelector("#modalBg .modal");
+  if (!box) return;
+  const f = Array.from(box.querySelectorAll("a[href],button:not([disabled]),input:not([disabled]):not([tabindex='-1']),select,textarea,[tabindex]:not([tabindex='-1'])")).filter(x => x.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+(function(){
+  const bg = document.getElementById("modalBg");
+  if (!bg) return;
+  new MutationObserver(() => {
+    const m = bg.querySelector(".modal");
+    if (m && !m.dataset.a11y) {
+      m.dataset.a11y = "1"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+      const f = m.querySelector("input,select,textarea,button");
+      if (f) f.focus({ preventScroll: true });
+    }
+  }).observe(bg, { childList: true });
+})();
+
+/* ---------- PWA: زر "ثبّت التطبيق" ---------- */
+let installEvt = null;
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault(); installEvt = e;
+  const b = document.createElement("button");
+  b.className = "ghost-btn"; b.textContent = "📲 ثبّت التطبيق";
+  b.style.cssText = "position:fixed;bottom:16px;inset-inline-start:16px;z-index:50;";
+  b.onclick = async () => { b.remove(); installEvt.prompt(); await installEvt.userChoice; installEvt = null; };
+  document.body.appendChild(b);
+});

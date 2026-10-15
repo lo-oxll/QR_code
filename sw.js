@@ -9,7 +9,7 @@
    المخزّنة بالكاش حتى لو رفعت التعديل الجديد فعليًا على GitHub.
 ========================================================================= */
 
-const CACHE_NAME = "qrcode-static-v18";
+const CACHE_NAME = "qrcode-static-v19";
 
 // الملفات الثابتة فقط (لا تتغير كثيرًا) — يُحدَّث رقم النسخة أعلاه عند أي تعديل بها لإجبار تحديث الكاش
 const STATIC_ASSETS = [
@@ -54,18 +54,24 @@ self.addEventListener("fetch", (event) => {
   // store-data.json يُطلب كل مرة بـ ?t=timestamp (انظر loadPublished) — تخزينه يملأ الكاش بنسخ لا تُستخدم أبدًا
   if (url.pathname.endsWith("/store-data.json")) return;
 
-  // نفس الأصل فقط (ملفات الموقع الثابتة) — نطبّق: شبكة أولًا (دائمًا أحدث نسخة)، والكاش كنسخة احتياطية عند انقطاع الإنترنت
+  // نفس الأصل فقط: صفحات HTML شبكة أولًا (تحديثات فورية)، وباقي الملفات stale-while-revalidate (سريعة + تتجدد بالخلفية)
   if (url.origin === self.location.origin) {
+    const isPage = req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html");
+    if (isPage) {
+      event.respondWith(
+        fetch(req, { cache: "no-cache" })
+          .then((res) => { if (res && res.ok) { const c = res.clone(); caches.open(CACHE_NAME).then((ch) => ch.put(req, c)); } return res; })
+          .catch(() => caches.match(req).then((r) => r || caches.match("./index.html")))
+      );
+      return;
+    }
     event.respondWith(
-      fetch(req, { cache: "no-cache" })
-        .then((res) => {
-          if (res && res.ok) {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
-          }
-          return res;
+      caches.open(CACHE_NAME).then((cache) =>
+        cache.match(req).then((cached) => {
+          const net = fetch(req).then((res) => { if (res && res.ok) cache.put(req, res.clone()); return res; }).catch(() => cached);
+          return cached || net;
         })
-        .catch(() => caches.match(req))
+      )
     );
   }
 });

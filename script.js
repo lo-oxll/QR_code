@@ -5,7 +5,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_SaukFLYePA4O6j9hm33Xfw_uvyYm1u-";
 let supabaseClient;
 try {
   if (typeof window.supabase === "undefined") throw new Error("Supabase SDK لم يُحمَّل");
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: true } }); // الجلسة بالذاكرة فقط: إعادة تحميل الصفحة تعني دخولًا جديدًا
 } catch (e) {
   console.error("Supabase client init error:", e);
   if (typeof showStoreLoadError === "function") showStoreLoadError();
@@ -462,7 +462,7 @@ let adminP = null;
 function loadAdminCode(){
   return adminP || (adminP = new Promise((res, rej) => {
     const el = document.createElement("script");
-    el.src = "admin.js?v=20"; el.onload = res;
+    el.src = "admin.js?v=21"; el.onload = res;
     el.onerror = () => { adminP = null; rej(new Error("admin.js")); };
     document.head.appendChild(el);
   }));

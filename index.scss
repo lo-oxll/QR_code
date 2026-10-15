@@ -1,0 +1,41 @@
+// نشر: supabase functions deploy manage-staff     (المتغيرات SUPABASE_URL / ANON_KEY / SERVICE_ROLE_KEY تُحقن تلقائيًا)
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
+const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const caller = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } });
+  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+  const { data: { user } } = await caller.auth.getUser();
+  if (!user) return json({ error: "غير مصرح" }, 401);
+  const { data: me } = await admin.from("staff_roles").select("role").eq("user_id", user.id).maybeSingle();
+  if (me?.role !== "owner") return json({ error: "هذه العملية للمالك فقط" }, 403);
+
+  let b: any; try { b = await req.json(); } catch { return json({ error: "طلب غير صالح" }, 400); }
+  const email = String(b.email ?? "").trim().toLowerCase();
+
+  if (b.action === "list") {
+    const { data, error } = await admin.from("staff_roles").select("username, created_at").eq("role", "staff").order("created_at");
+    return error ? json({ error: error.message }, 400) : json(data);
+  }
+  if (b.action === "add") {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "بريد إلكتروني غير صالح" }, 400);
+    if (String(b.password ?? "").length < 8) return json({ error: "كلمة المرور 8 أحرف على الأقل" }, 400);
+    const { data, error } = await admin.auth.admin.createUser({ email, password: b.password, email_confirm: true });
+    if (error || !data.user) return json({ error: error?.message ?? "تعذر إنشاء المستخدم" }, 400);
+    const { error: e2 } = await admin.from("staff_roles").insert({ user_id: data.user.id, username: email, role: "staff" });
+    if (e2) { await admin.auth.admin.deleteUser(data.user.id); return json({ error: e2.message }, 400); }
+    return json({ ok: true });
+  }
+  if (b.action === "remove") {
+    const { data: t } = await admin.from("staff_roles").select("user_id, role").eq("username", email).maybeSingle();
+    if (!t || t.role !== "staff") return json({ error: "مشرف غير موجود" }, 404);
+    const { error } = await admin.auth.admin.deleteUser(t.user_id);
+    return error ? json({ error: error.message }, 400) : json({ ok: true });
+  }
+  return json({ error: "إجراء غير معروف" }, 400);
+});

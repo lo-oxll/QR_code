@@ -184,6 +184,10 @@ async function findCoupon(code){
       return m ? { code: k, type: m.type, value: m.value } : null;
     }
   }
+  if (!state.currentAdmin) {
+    const r = await supabaseClient.rpc("check_coupon", { p_code: k });
+    if (!r.error) return (r.data || [])[0] || null;
+  }
   const { data } = await supabaseClient.from("coupons").select("*").eq("code", k);
   const c = (data || [])[0];
   return c && c.active !== false ? c : null;

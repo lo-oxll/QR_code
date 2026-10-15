@@ -10,8 +10,8 @@ function renderAdminLogin(){
           <div class="seal" style="margin:0 auto;">دخول</div>
         </div>
         <h2 class="center" style="margin:0 0 4px;">لوحة الإدارة</h2>
-        <p class="hint center">أدخل اسم المستخدم وكلمة المرور للدخول</p>
-        <div class="field"><div class="box">👤<input id="usr" placeholder="اسم المستخدم" autocomplete="username"></div></div>
+        <p class="hint center">أدخل البريد الإلكتروني وكلمة المرور للدخول</p>
+        <div class="field"><div class="box">👤<input id="usr" placeholder="البريد الإلكتروني" type="email" dir="ltr" autocomplete="username"></div></div>
         <div class="field"><div class="box">🔑<input id="pw" placeholder="كلمة المرور" type="password" autocomplete="current-password"></div></div>
         <div class="err" id="loginErr" style="margin-bottom:10px;color:var(--err);font-size:12px;"></div>
         <button class="primary-btn" id="loginBtn">دخول</button>
@@ -33,18 +33,16 @@ function renderAdminLogin(){
     if (!username || !pw) return;
     btn.disabled = true; btn.textContent = "جارِ الدخول...";
 
-    const hash = await sha256Hex(pw);
-
     try {
-      const { data, error } = await supabaseClient.rpc('verify_admin_login', {
-        p_username: username,
-        p_password_hash: hash
-      });
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        state.currentAdmin = { username: data[0].username, role: data[0].role, passwordHash: hash };
+      const { data: au, error: aerr } = await supabaseClient.auth.signInWithPassword({ email: username, password: pw });
+      if (aerr && !(aerr.status >= 400 && aerr.status < 500)) throw aerr;
+      let data = [];
+      if (!aerr) {
+        const { data: rl } = await supabaseClient.from('staff_roles').select('username,role').eq('user_id', au.user.id).maybeSingle();
+        if (rl) data = [rl]; else await supabaseClient.auth.signOut();
+      }
+      if (data.length > 0) {
+        state.currentAdmin = { username: data[0].username, role: data[0].role };
         document.getElementById("loginErr").textContent = "";
         await Promise.all([loadProducts(), loadSettings()]);
         state.view = "admin";
@@ -102,6 +100,7 @@ function renderAdmin(){
     stopOrderPolling();
     state.newOrdersCount = 0;
     document.title = "QR CODE | طباعة · تطريز · ليزر";
+    try { await supabaseClient.auth.signOut(); } catch (e) {}
     state.currentAdmin = null;
     state.view = "store";
     await Promise.all([loadProducts(), loadSettings()]);
@@ -882,12 +881,8 @@ function renderOrdersTab(body){
     if (!order) return;
 
     if (isDbId(orderId)) {
-      const { error } = await supabaseClient.rpc('update_order_secure', {
-        p_username: state.currentAdmin.username,
-        p_password_hash: state.currentAdmin.passwordHash,
-        p_order_id: orderId,
-        p_fields: { review_status: status }
-      });
+      let { data: upRows, error } = await supabaseClient.from('orders').update({ review_status: status }).eq('id', orderId).select();
+      if (!error && !(upRows || []).length) error = { message: "غير مصرح بالتعديل" };
       if (error) {
         console.error("update review_status error", error);
         showToast("تعذر تحديث حالة الطلب: " + (error.message || "خطأ غير معروف"), "err");
@@ -973,11 +968,8 @@ function renderOrdersTab(body){
           return;
         }
 
-        const { error } = await supabaseClient.rpc('delete_order_secure', {
-          p_username: state.currentAdmin.username,
-          p_password_hash: state.currentAdmin.passwordHash,
-          p_order_id: oid
-        });
+        let { data: delRows, error } = await supabaseClient.from('orders').delete().eq('id', oid).select();
+        if (!error && !(delRows || []).length) error = { message: "غير مصرح بالحذف (للمالك فقط)" };
         if (error) {
           console.error("delete order error", error);
           showToast("تعذر حذف الطلب: " + (error.message || "خطأ غير معروف"), "err");
@@ -1171,24 +1163,17 @@ function renderSettingsTab(body){
     const newPw = document.getElementById("newPw").value.trim();
     const msgEl = document.getElementById("pwMsg");
 
-    if (!newPw || newPw.length < 4) {
+    if (!newPw || newPw.length < 8) {
       msgEl.style.color = "var(--err)";
-      msgEl.textContent = "كلمة المرور الجديدة يجب أن تكون 4 أحرف/أرقام على الأقل";
+      msgEl.textContent = "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل";
       return;
     }
 
-    const oldHash = await sha256Hex(oldPw);
-    const newHash = await sha256Hex(newPw);
-
     try {
-      const { error } = await supabaseClient.rpc('change_owner_password', {
-        p_owner_username: state.currentAdmin.username,
-        p_old_password_hash: oldHash,
-        p_new_password_hash: newHash
-      });
+      const { error: re } = await supabaseClient.auth.signInWithPassword({ email: state.currentAdmin.username, password: oldPw });
+      if (re) throw new Error("كلمة المرور الحالية غير صحيحة");
+      const { error } = await supabaseClient.auth.updateUser({ password: newPw });
       if (error) throw error;
-
-      state.currentAdmin.passwordHash = newHash;
       document.getElementById("oldPw").value = "";
       document.getElementById("newPw").value = "";
       msgEl.style.color = "var(--moss)";
@@ -1209,7 +1194,7 @@ async function renderAdminsTab(body){
     <div class="panel">
       <h3>إضافة مشرف جديد</h3>
       <p class="hint">يمكن للمشرف الجديد مراجعة الحجوزات فقط، ولا يستطيع تغيير كلمة المرور أو رقم واتساب أو حذف/إضافة المنتجات.<br>ستظهر لك كلمة المرور مرة واحدة فقط بعد الإضافة — احفظها فورًا، فلا يمكن استرجاعها بعد ذلك من أي مكان.</p>
-      <input class="plain-input" id="newUsr" placeholder="اسم مستخدم جديد">
+      <input class="plain-input" id="newUsr" placeholder="البريد الإلكتروني للمشرف" type="email" dir="ltr">
       <input class="plain-input" id="newPw" type="password" placeholder="كلمة المرور">
       <div class="err" id="addAdminErr" style="margin:-6px 0 10px;color:var(--err);font-size:12px;"></div>
       <button class="primary-btn" id="addAdminBtn">+ إضافة مشرف</button>
@@ -1225,22 +1210,15 @@ async function renderAdminsTab(body){
     const newPw = document.getElementById("newPw").value;
     const errEl = document.getElementById("addAdminErr");
     errEl.textContent = "";
-    if (!newUsr || newPw.length < 4) {
-      errEl.textContent = "الرجاء إدخال اسم مستخدم وكلمة مرور لا تقل عن 4 أحرف";
+    if (!newUsr || newPw.length < 8) {
+      errEl.textContent = "الرجاء إدخال بريد إلكتروني صحيح وكلمة مرور لا تقل عن 8 أحرف";
       return;
     }
     const btn = document.getElementById("addAdminBtn");
     btn.disabled = true; btn.textContent = "جارِ الإضافة...";
 
-    const newHash = await sha256Hex(newPw);
     try {
-      const { error } = await supabaseClient.rpc('add_staff_admin', {
-        p_owner_username: state.currentAdmin.username,
-        p_owner_password_hash: state.currentAdmin.passwordHash,
-        p_new_username: newUsr,
-        p_new_password_hash: newHash
-      });
-      if (error) throw error;
+      await staffFn({ action: 'add', email: newUsr, password: newPw });
       document.getElementById("newUsr").value = "";
       document.getElementById("newPw").value = "";
       // كلمة المرور بنصها الصريح موجودة هنا فقط لحظيًا قبل أن تُهاش وتُرسل.
@@ -1257,11 +1235,7 @@ async function renderAdminsTab(body){
   };
 
   try {
-    const { data, error } = await supabaseClient.rpc('list_staff_admins', {
-      p_owner_username: state.currentAdmin.username,
-      p_owner_password_hash: state.currentAdmin.passwordHash
-    });
-    if (error) throw error;
+    const data = await staffFn({ action: 'list' });
     const listEl = document.getElementById("staffList");
     if (!data || data.length === 0) {
       listEl.innerHTML = `<p class="hint center">لا يوجد مشرفون مضافون بعد.</p>`;
@@ -1284,12 +1258,7 @@ async function renderAdminsTab(body){
       b.onclick = async () => {
         if (!(await holdConfirm(`إزالة صلاحية ${b.dataset.removeusr}؟`))) return;
         try {
-          const { error } = await supabaseClient.rpc('remove_staff_admin', {
-            p_owner_username: state.currentAdmin.username,
-            p_owner_password_hash: state.currentAdmin.passwordHash,
-            p_target_username: b.dataset.removeusr
-          });
-          if (error) throw error;
+          await staffFn({ action: 'remove', email: b.dataset.removeusr });
           showToast("تمت الإزالة");
           logActivity("إزالة مشرف", b.dataset.removeusr);
           await renderAdminsTab(body);
@@ -1309,9 +1278,7 @@ async function renderAdminsTab(body){
 async function loadOrders(){
   try {
     if (!state.currentAdmin) { state.orders = []; return; }
-    let { data: dbOrders, error: ordErr } = await supabaseClient.rpc('list_orders_secure', { p_username: state.currentAdmin.username, p_password_hash: state.currentAdmin.passwordHash });
-    if (ordErr) ({ data: dbOrders, error: ordErr } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false }));
-    else if (Array.isArray(dbOrders)) dbOrders.sort((x, y) => new Date(y.created_at) - new Date(x.created_at));
+    const { data: dbOrders, error: ordErr } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
 
     if (!ordErr && dbOrders) {
       state.orders = dbOrders;
@@ -1377,3 +1344,14 @@ function startOrderPolling(){
   startOrderRealtime(checkNewOrders);
 }
 
+
+/* استدعاء Edge Function لإدارة المشرفين (تحتاج صلاحية service role على الخادم، لذلك لا تتم من المتصفح) */
+async function staffFn(body){
+  const { data, error } = await supabaseClient.functions.invoke('manage-staff', { body });
+  if (error) {
+    let m = error.message;
+    try { const j = await error.context.json(); m = j.error || m; } catch (e) {}
+    throw new Error(m);
+  }
+  return data;
+}

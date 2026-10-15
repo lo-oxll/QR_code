@@ -4,8 +4,12 @@ const GH = { owner: "lo-oxll", repo: "QR_code", branch: "main" };
 const GH_KEY = "qrcode:gh_token";
 const PUB_FILE = "store-data.json";
 
+/* النشر عبر GitHub مخصص للوضع المحلي فقط (localdb.js). مع Supabase الحقيقي تُقرأ البيانات مباشرة من القاعدة. */
+const LOCAL_DB = !(window.supabase && window.supabase.SupabaseClient);
+
 let publishedP = null;
 function loadPublished(force){
+  if (!LOCAL_DB) return Promise.resolve(null);
   if (force || !publishedP) {
     publishedP = fetch(PUB_FILE + "?t=" + Date.now(), { cache: "no-store" })
       .then(r => (r.ok ? r.json() : null)).catch(() => null);
@@ -93,6 +97,7 @@ async function publishStore0(setStatus){
 
 /* أول دخول للمدير على جهاز جديد: نسخ المنشور حاليًا إلى النسخة المحلية ليتمكن من تعديله */
 async function seedFromPublished(){
+  if (!LOCAL_DB) return;
   if (localStorage.getItem("qrcode:seeded")) return;
   localStorage.setItem("qrcode:seeded", "1");
   const pub = await loadPublished();
@@ -109,6 +114,7 @@ async function seed0(pub){
 
 function renderPublishPanel(el){
   if (!el) return;
+  if (!LOCAL_DB) { el.style.display = "none"; return; }
   const saved = !!localStorage.getItem(GH_KEY);
   el.innerHTML = `<h3>نشر المتجر للعامة</h3>
     <p class="hint">المنتجات تُحفظ على هذا الجهاز. لتظهر لكل من يملك الرابط:<br>1) اضغط الزر أدناه لتنزيل ملف <b dir="ltr">store-data.json</b><br>2) افتح المستودع على GitHub ← <b dir="ltr">Add file</b> ← <b dir="ltr">Upload files</b> ← اختر الملف (يستبدل القديم) ← <b dir="ltr">Commit changes</b><br>3) يظهر للجميع بعد دقيقة تقريبًا.</p>
@@ -163,7 +169,7 @@ function schedulePublish(){
     } catch (e) { showToast("تعذر النشر: " + (e.message || e), "err"); }
   }, 4000);
 }
-(function(){
+if (LOCAL_DB) (function(){
   const cc = window.supabase.createClient;
   window.supabase.createClient = (...a) => {
     const c = cc(...a), from = c.from;

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: ; connect-src 'self' https://api.github.com; base-uri 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://api.github.com https://*.supabase.co wss://*.supabase.co; base-uri 'self';">
 <title>QR CODE | طباعة · تطريز · ليزر</title>
 <meta name="description" content="QR CODE للطباعة والتطريز والليزر — تشيرتات، أوشحة تخرج، باجات تعريفية، أقلام مطبوعة، وسجاد Tufting بتصميم مخصص." />
 
@@ -32,7 +32,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="QR CODE">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=17">
 <script>
   // إذا فشل تحميل مكتبة Supabase (شبكة ضعيفة/بطيئة أو حجب المصدر)، نظهر رسالة خطأ فورًا
   // بدل ما تبقى شاشة "جارِ تحميل المتجر" عالقة للأبد بدون أي تفسير للزبون
@@ -58,7 +58,7 @@
     if (el && el.style.display !== "none") showStoreLoadError();
   }, true);
 </script>
-<script src="localdb.js" onerror="showStoreLoadError()"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" onerror="showStoreLoadError()"></script>
 <script>
   // تسجيل Service Worker لتفعيل تحميل أسرع من الكاش وعمل جزئي بدون إنترنت.
   // لا علاقة له ببيانات المنتجات/الطلبات (تُستثنى صراحة داخل sw.js وتبقى مباشرة من Supabase دائمًا)
@@ -95,8 +95,8 @@
   <button id="cartFab" class="cart-top-btn" title="السلة" style="display:none;">🛒</button>
 </div>
 
-<script src="components.js"></script>
-<script src="publish.js"></script>
-<script src="script.js"></script>
+<script src="components.js?v=17"></script>
+<script src="publish.js?v=17"></script>
+<script src="script.js?v=17"></script>
 </body>
 </html>

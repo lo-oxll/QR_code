@@ -1,9 +1,11 @@
-/* ======================= قاعدة البيانات المحلية (localdb.js) ======================= */
+/* ======================= تهيئة اتصال Supabase ======================= */
+const SUPABASE_URL = "https://hhknbkyjalsbanoudoos.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_SaukFLYePA4O6j9hm33Xfw_uvyYm1u-";
 
 let supabaseClient;
 try {
-  if (typeof window.supabase === "undefined") throw new Error("localdb.js لم يُحمَّل");
-  supabaseClient = window.supabase.createClient();
+  if (typeof window.supabase === "undefined") throw new Error("Supabase SDK لم يُحمَّل");
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 } catch (e) {
   console.error("Supabase client init error:", e);
   if (typeof showStoreLoadError === "function") showStoreLoadError();

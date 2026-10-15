@@ -71,10 +71,13 @@ function renderAdmin(){
   const roleLabel = isOwner ? "مدير المتجر" : "مشرف";
 
   const ordersBadge = state.newOrdersCount > 0 ? `<span class="notif-badge">${state.newOrdersCount}</span>` : "";
+  const pendingReviewsCount = state.orders.filter(o => o.customer_rating && reviewModeration(o) !== "approved").length;
+  const reviewsBadge = pendingReviewsCount > 0 ? `<span class="notif-badge">${pendingReviewsCount}</span>` : "";
   const tabsHtml = isOwner
     ? `
       <button class="tab ${state.adminTab==='products'?'active':''}" data-tab="products">المنتجات</button>
       <button class="tab ${state.adminTab==='orders'?'active':''}" data-tab="orders">الحجوزات (${state.orders.length})${ordersBadge}</button>
+      <button class="tab ${state.adminTab==='reviews'?'active':''}" data-tab="reviews">الآراء${reviewsBadge}</button>
       <button class="tab ${state.adminTab==='stats'?'active':''}" data-tab="stats">الإحصائيات</button>
       <button class="tab ${state.adminTab==='activity'?'active':''}" data-tab="activity">سجل النشاط</button>
       <button class="tab ${state.adminTab==='settings'?'active':''}" data-tab="settings">الإعدادات</button>
@@ -83,6 +86,7 @@ function renderAdmin(){
     : `
       <button class="tab ${state.adminTab==='orders'?'active':''}" data-tab="orders">الحجوزات (${state.orders.length})${ordersBadge}</button>
       <button class="tab ${state.adminTab==='products'?'active':''}" data-tab="products">المنتجات</button>
+      <button class="tab ${state.adminTab==='reviews'?'active':''}" data-tab="reviews">الآراء${reviewsBadge}</button>
     `;
 
   app.innerHTML = `
@@ -115,13 +119,16 @@ function renderAdmin(){
         document.title = "QR CODE | طباعة · تطريز · ليزر";
         await loadOrders();
         render();
+      } else if (state.adminTab === "reviews") {
+        await loadOrders();
+        render();
       }
     };
   });
 
   // حماية إضافية: منع الوصول لأي تبويب غير مصرح به حتى لو تم التلاعب بالحالة محليًا
   // المشرف (staff) يُسمح له فقط بـ orders و products (عرض فقط)
-  if (!isOwner && !["orders", "products"].includes(state.adminTab)) state.adminTab = "orders";
+  if (!isOwner && !["orders", "products", "reviews"].includes(state.adminTab)) state.adminTab = "orders";
 
   const body = document.getElementById("adminBody");
   if (state.adminTab === "products") {
@@ -129,6 +136,7 @@ function renderAdmin(){
     else renderProductsReadOnly(body);
   }
   else if (state.adminTab === "orders") renderOrdersTab(body);
+  else if (state.adminTab === "reviews") renderReviewsTab(body);
   else if (state.adminTab === "stats" && isOwner) renderStatsTab(body);
   else if (state.adminTab === "activity" && isOwner) renderActivityTab(body);
   else if (state.adminTab === "settings" && isOwner) renderSettingsTab(body);
@@ -157,8 +165,6 @@ function renderProductsReadOnly(body){
 function renderProductsTab(body){
   let pendingImage = null;
   let pendingPos = { x: 50, y: 50 }; // نسبة موضع الصورة داخل الإطار (لضبط أي جزء منها يظهر)
-  const AVAILABLE_SIZES = ["S","M","L","XL","XXL"];
-  let pendingSizes = new Set();
   let pendingColors = []; // { name, hex, type: 'normal'|'3d', images: [dataURL,...] }
   let colorDraftImages = []; // صور اللون الجاري إضافته حاليًا قبل الضغط على "أضف اللون"
 
@@ -179,10 +185,7 @@ function renderProductsTab(body){
       <p class="hint" style="margin:-6px 0 16px;">إذا حددت رقمًا، يظهر "نفذت الكمية" تلقائيًا للزبون عند نفادها ويُمنع الحجز.</p>
       <label class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 16px;cursor:pointer;"><input type="checkbox" id="pFeatured"> منتج مميز (تظهر عليه شارة ✦ مميز)</label>
 
-      <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">القياسات المتوفرة (اختياري)</p>
-      <div class="size-row" id="sizeBuilder" style="margin-bottom:16px;">
-        ${AVAILABLE_SIZES.map(s => `<button type="button" class="size-chip" data-sz="${s}">${s}</button>`).join("")}
-      </div>
+      <div id="sizeBuilderHost"></div>
 
       <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">الألوان المتوفرة (اختياري)</p>
       <div class="color-builder">
@@ -206,14 +209,8 @@ function renderProductsTab(body){
   const uploadBox = document.getElementById("uploadBox");
   const dragHint = document.getElementById("dragHint");
 
-  // --- القياسات: تبديل تحديد كل قياس عند الضغط ---
-  document.querySelectorAll("#sizeBuilder [data-sz]").forEach(chip => {
-    chip.onclick = () => {
-      const sz = chip.dataset.sz;
-      if (pendingSizes.has(sz)) { pendingSizes.delete(sz); chip.classList.remove("active"); }
-      else { pendingSizes.add(sz); chip.classList.add("active"); }
-    };
-  });
+  // --- القياسات: قياسية (S..XXL) + قياسات بالسنتيمتر (الطول×العرض) ويمكن إضافة أكثر من قياس ---
+  const sizeBuilder = mountSizeBuilder(document.getElementById("sizeBuilderHost"), []);
 
   // --- بناء الألوان: اختيار صورة/صور اللون الجاري إضافته ---
   const cFilesLabel = document.getElementById("cFilesLabel");
@@ -360,6 +357,7 @@ function renderProductsTab(body){
     if (!name) { document.getElementById("errPName").textContent = "أدخل اسم المنتج"; ok = false; }
     if (!price || Number(price) <= 0) { document.getElementById("errPPrice").textContent = "أدخل سعرًا صحيحًا أكبر من صفر"; ok = false; }
     if (!ok) return;
+    if (!sizeBuilder.flush()) return; // إن كُتب طول/عرض ولم يُضَف بعد، يُضاف تلقائيًا (أو يُنبَّه المدير لخطئه)
 
     const btn = document.getElementById("addBtn");
     btn.disabled = true; btn.textContent = "جارِ الحفظ...";
@@ -369,7 +367,8 @@ function renderProductsTab(body){
     if (category) row.category = category;
     if (document.getElementById("pFeatured")?.checked) row.featured = true;
     if (pendingImage) row.image_position = `${pendingPos.x}% ${pendingPos.y}%`;
-    if (pendingSizes.size) row.sizes = [...pendingSizes].join(",");
+    const szList = sizeBuilder.get();
+    if (szList.length) row.sizes = szList.join(",");
     if (pendingColors.length) row.colors = pendingColors;
     const stockVal = normalizeDigits(document.getElementById("pStock").value.trim());
     if (stockVal !== "" && !isNaN(Number(stockVal))) row.stock = Math.max(0, Math.floor(Number(stockVal)));
@@ -402,12 +401,16 @@ function renderProductsTab(body){
       if (sizes.length) variantBits.push(sizes.join("/"));
       if (p.stock !== undefined && p.stock !== null) variantBits.push(`المخزون: ${p.stock}`);
       return `
+        <div class="prod-wrap">
         <div class="prod-row">
           ${prodImg}
           <div class="info"><h4>${esc(p.name)}</h4><p>${money(p.price)} د.ع${variantBits.length ? " · " + esc(variantBits.join(" · ")) : ""}</p></div>
           <input type="number" min="0" class="stock-input" data-stockinput="${p.id}" placeholder="الكمية" value="${p.stock !== undefined && p.stock !== null ? p.stock : ''}" style="width:64px;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-family:inherit;font-size:12px;text-align:center;">
           <button class="del-btn" data-stocksave="${p.id}" title="تحديث المخزون" style="font-size:13px;">💾</button>
+          <button class="del-btn" data-sizeedit="${p.id}" title="تعديل القياسات" style="font-size:14px;">📏</button>
           <button class="del-btn" data-del="${p.id}">🗑</button>
+        </div>
+        <div class="panel" data-szpanel="${p.id}" style="display:none;margin:-4px 0 10px;"></div>
         </div>
       `;
     }).join("");
@@ -439,6 +442,41 @@ function renderProductsTab(body){
         showToast("تم تحديث المخزون بنجاح");
         logActivity("تحديث مخزون", `${p2 ? p2.name : pid} → ${newStock}`);
         renderAdmin();
+      };
+    });
+    list.querySelectorAll("[data-sizeedit]").forEach(b => {
+      b.onclick = () => {
+        const pid = b.dataset.sizeedit;
+        const panel = list.querySelector(`[data-szpanel="${pid}"]`);
+        if (!panel) return;
+        if (panel.style.display !== "none") { panel.style.display = "none"; return; }
+        const p = state.products.find(x => String(x.id) === String(pid));
+        if (!p) return;
+        panel.style.display = "block";
+        panel.innerHTML = `<div data-szhost></div><button class="primary-btn" data-szsave>حفظ القياسات</button>`;
+        const builder = mountSizeBuilder(panel.querySelector("[data-szhost]"), parseSizes(p));
+        panel.querySelector("[data-szsave]").onclick = async () => {
+          if (!builder.flush()) return;
+          const newSizes = builder.get().join(",");
+          if (!isDbId(pid)) {
+            p.sizes = newSizes;
+            saveLocal(KEYS.PRODUCTS, state.products);
+            showToast("تم حفظ القياسات (محليًا فقط)");
+            renderAdmin();
+            return;
+          }
+          let { data: upRows, error } = await supabaseClient.from('products').update({ sizes: newSizes }).eq('id', pid).select();
+          if (!error && !(upRows || []).length) error = { message: "غير مصرح بالتعديل" };
+          if (error) {
+            console.error("sizes update error", error);
+            showToast("تعذر حفظ القياسات: " + (error.message || "خطأ غير معروف"), "err");
+            return;
+          }
+          p.sizes = newSizes;
+          showToast("تم حفظ القياسات — لينشر للجميع عند استخدام النشر اليدوي: الإعدادات ← تنزيل ملف النشر");
+          logActivity("تعديل قياسات", p.name);
+          renderAdmin();
+        };
       };
     });
     list.querySelectorAll("[data-del]").forEach(b => {
@@ -482,6 +520,164 @@ function renderProductsTab(body){
 
 // حالة المراجعة الافتراضية "pending" لأي طلب قديم لم يُحدَّث بعد إضافة هذا العمود
 function reviewStatus(o){ return o.review_status || "pending"; }
+
+/* ======================= القياسات (قياسية + سنتيمتر) ======================= */
+// القياسات تُخزَّن كنص مفصول بفواصل في عمود sizes الموجود أصلًا (مثل: "S,M,50×100 سم,80×150 سم")،
+// لذلك لا حاجة لأي تغيير بقاعدة البيانات، وتعمل مع parseSizes وعرض المتجر والسلة والطلبات كما هي.
+const STD_SIZES = ["S","M","L","XL","XXL"];
+function cmSizeLabel(len, wid){ return `${len}×${wid} سم`; }
+// يعيد: null إن كان الحقل فارغًا، NaN إن كان غير صالح، وإلا الرقم (يقبل الأرقام العربية والكسور مثل 12.5)
+function readCm(raw){
+  const s = normalizeDigits(raw).replace(/[٫,،]/g, ".").trim();
+  if (!s) return null;
+  if (!/^\d+(\.\d+)?$/.test(s)) return NaN;
+  const n = Number(s);
+  return n > 0 && n <= 10000 ? n : NaN;
+}
+function mountSizeBuilder(host, initial){
+  const sel = [];
+  const add = s => { if (s && !sel.includes(s)) sel.push(s); };
+  (initial || []).forEach(add);
+  host.innerHTML = `
+    <p class="hint" style="margin:0 0 6px;font-weight:700;color:var(--ink);">القياسات المتوفرة (اختياري)</p>
+    <div class="size-row" data-std style="margin-bottom:12px;padding:0;"></div>
+    <p class="hint" style="margin:0 0 6px;">قياس بالسنتيمتر (مثال للسجاد: 50 × 100) — يمكنك إضافة أكثر من قياس</p>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+      <input class="plain-input" data-len placeholder="الطول (سم)" inputmode="decimal" style="margin:0;flex:1;min-width:0;">
+      <span style="font-weight:700;">×</span>
+      <input class="plain-input" data-wid placeholder="العرض (سم)" inputmode="decimal" style="margin:0;flex:1;min-width:0;">
+      <button type="button" class="dark-btn" data-addcm style="width:auto;white-space:nowrap;">+ أضف</button>
+    </div>
+    <div class="size-row" data-cm style="margin-bottom:16px;padding:0;"></div>
+    <p class="hint" data-cmhint style="margin:-8px 0 16px;display:none;">اضغط على أي قياس مضاف لحذفه.</p>`;
+  const std = host.querySelector("[data-std]"), cm = host.querySelector("[data-cm]");
+  const lenEl = host.querySelector("[data-len]"), widEl = host.querySelector("[data-wid]");
+  const hint = host.querySelector("[data-cmhint]");
+
+  const paint = () => {
+    std.innerHTML = STD_SIZES.map(s => `<button type="button" class="size-chip ${sel.includes(s) ? "active" : ""}" data-sz="${s}">${s}</button>`).join("");
+    const custom = sel.filter(s => !STD_SIZES.includes(s));
+    cm.innerHTML = custom.map(s => `<button type="button" class="size-chip active" data-rm="${esc(s)}">${esc(s)} ✕</button>`).join("");
+    hint.style.display = custom.length ? "block" : "none";
+    std.querySelectorAll("[data-sz]").forEach(c => c.onclick = () => {
+      const i = sel.indexOf(c.dataset.sz);
+      if (i >= 0) sel.splice(i, 1); else sel.push(c.dataset.sz);
+      paint();
+    });
+    cm.querySelectorAll("[data-rm]").forEach(c => c.onclick = () => {
+      const i = sel.indexOf(c.dataset.rm);
+      if (i >= 0) sel.splice(i, 1);
+      paint();
+    });
+  };
+
+  // يضيف القياس المكتوب بالحقلين. true = لا مشكلة (أُضيف أو الحقلان فارغان)، false = إدخال ناقص/غير صالح
+  const addFromInputs = () => {
+    const l = readCm(lenEl.value), w = readCm(widEl.value);
+    if (l === null && w === null) return true;
+    if (l === null || w === null || Number.isNaN(l) || Number.isNaN(w)) {
+      showToast("أدخل الطول والعرض بالسنتيمتر كأرقام صحيحة", "err");
+      return false;
+    }
+    add(cmSizeLabel(l, w));
+    lenEl.value = ""; widEl.value = "";
+    paint();
+    return true;
+  };
+  host.querySelector("[data-addcm]").onclick = () => {
+    if (!lenEl.value.trim() && !widEl.value.trim()) { showToast("أدخل الطول والعرض بالسنتيمتر", "err"); return; }
+    if (addFromInputs()) lenEl.focus();
+  };
+  [lenEl, widEl].forEach(el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addFromInputs(); } }));
+  paint();
+  return { get: () => sel.slice(), flush: addFromInputs };
+}
+
+/* ======================= الآراء: مراجعة (نشر/حذف) قبل ظهورها للزبائن ======================= */
+// review_moderation: pending (بانتظار الموافقة) | approved (منشور) | rejected (محذوف — يمنع إعادة التقييم)
+function reviewModeration(o){ return o.review_moderation || "pending"; }
+
+function renderReviewsTab(body){
+  const withReview = state.orders.filter(o => o.customer_rating);
+  const pending = withReview.filter(o => reviewModeration(o) !== "approved");
+  const approved = withReview.filter(o => reviewModeration(o) === "approved");
+  const filter = state.reviewFilter === "approved" ? "approved" : "pending";
+  const list = filter === "approved" ? approved : pending;
+
+  const stars = n => "⭐".repeat(n) + "☆".repeat(5 - n);
+  const cards = list.length === 0
+    ? `<p class="hint center" style="padding:30px 0;">${filter === "approved" ? "لا توجد آراء منشورة بعد." : "لا توجد آراء بانتظار الموافقة."}</p>`
+    : list.map(o => `
+      <div class="order-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+          <div style="font-weight:700;font-size:14px;">👤 ${esc(o.customer_name)}</div>
+          <div style="font-size:16px;color:#f5a623;white-space:nowrap;">${stars(o.customer_rating)}</div>
+        </div>
+        <div class="hint" style="margin-bottom:8px;">${esc(o.product_name || "")} · ${orderRef(o)} · ${new Date(o.created_at).toLocaleDateString("ar")}</div>
+        ${o.customer_review ? `<p style="font-size:13px;margin:0 0 10px;background:var(--card);padding:8px;border-radius:8px;">${esc(o.customer_review)}</p>` : `<p class="hint" style="margin:0 0 10px;">تقييم بالنجوم فقط (بدون تعليق)</p>`}
+        <div class="order-actions">
+          ${filter === "pending"
+            ? `<button class="btn-confirm" data-rvapprove="${o.id}">✓ نشر</button>`
+            : `<button class="btn-cancel" data-rvhide="${o.id}">إخفاء عن الزبائن</button>`}
+          <button class="btn-delete" data-rvdel="${o.id}">🗑 حذف</button>
+        </div>
+      </div>`).join("");
+
+  body.innerHTML = `
+    <div class="tabs" style="margin-bottom:16px;">
+      <button class="tab ${filter === "pending" ? "active" : ""}" data-rvfilter="pending">بانتظار الموافقة (${pending.length})</button>
+      <button class="tab ${filter === "approved" ? "active" : ""}" data-rvfilter="approved">منشورة (${approved.length})</button>
+    </div>
+    <p class="hint" style="margin:0 0 12px;">لا يظهر أي رأي للزبائن إلا بعد الضغط على «نشر». يظهر مع اسم المشتري.</p>
+    ${cards}`;
+
+  body.querySelectorAll("[data-rvfilter]").forEach(b => b.onclick = () => { state.reviewFilter = b.dataset.rvfilter; renderReviewsTab(body); });
+
+  async function patchReview(id, patch){
+    const o = state.orders.find(x => String(x.id) === String(id));
+    if (!o) return null;
+    if (isDbId(id)) {
+      let { data: upRows, error } = await supabaseClient.from('orders').update(patch).eq('id', id).select();
+      if (!error && !(upRows || []).length) error = { message: "غير مصرح بالتعديل" };
+      if (error) {
+        console.error("review update error", error);
+        const m = error.message || "خطأ غير معروف";
+        showToast("تعذر تحديث الرأي: " + (/review_moderation/.test(m) ? "نفّذ ملف reviews-moderation.sql في Supabase أولًا" : m), "err");
+        return null;
+      }
+    }
+    Object.assign(o, patch);
+    if (!isDbId(id)) saveLocal(KEYS.ORDERS, state.orders);
+    return o;
+  }
+
+  body.querySelectorAll("[data-rvapprove]").forEach(b => b.onclick = async () => {
+    const o = await patchReview(b.dataset.rvapprove, { review_moderation: "approved" });
+    if (!o) return;
+    showToast("تم نشر الرأي");
+    logActivity("نشر رأي", orderRef(o));
+    renderAdmin();
+  });
+  body.querySelectorAll("[data-rvhide]").forEach(b => b.onclick = async () => {
+    const o = await patchReview(b.dataset.rvhide, { review_moderation: "pending" });
+    if (!o) return;
+    showToast("تم إخفاء الرأي عن الزبائن");
+    logActivity("إخفاء رأي", orderRef(o));
+    renderAdmin();
+  });
+  body.querySelectorAll("[data-rvdel]").forEach(b => b.onclick = async () => {
+    if (!(await holdConfirm("حذف هذا الرأي نهائيًا؟"))) return;
+    const id = b.dataset.rvdel;
+    const before = state.orders.find(x => String(x.id) === String(id));
+    if (!before) return;
+    const backup = { customer_rating: before.customer_rating, customer_review: before.customer_review, review_moderation: reviewModeration(before) };
+    const o = await patchReview(id, { customer_rating: null, customer_review: null, review_moderation: "rejected" });
+    if (!o) return;
+    logActivity("حذف رأي", orderRef(o));
+    showUndoToast("تم حذف الرأي", async () => { await patchReview(id, backup); renderAdmin(); });
+    renderAdmin();
+  });
+}
 
 /* ---------- تبويب الحجوزات: مقسّم إلى قيد المراجعة (الرئيسي) / مؤكدة / ملغية ---------- */
 /* ======================= طباعة فاتورة العميل وإيصال الإنتاج الداخلي ======================= */

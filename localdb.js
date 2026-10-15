@@ -103,10 +103,10 @@
     },
     submit_order_review: async p => {
       const o = mem.orders.find(x => x.id === p.p_order_id && digits(x.phone_number) === digits(p.p_phone));
-      if (!o || o.review_status !== "confirmed") throw new Error("تعذر التقييم");
-      o.customer_rating = p.p_rating; o.customer_review = p.p_review; await persist(); return null;
+      if (!o || o.review_status !== "confirmed" || o.review_moderation === "rejected") throw new Error("تعذر التقييم");
+      o.customer_rating = p.p_rating; o.customer_review = p.p_review; o.review_moderation = "pending"; await persist(); return null;
     },
-    get_public_reviews: async () => mem.orders.filter(o => o.customer_rating).map(o => ({ customer_rating: o.customer_rating, customer_review: o.customer_review, product_name: o.product_name })),
+    get_public_reviews: async () => mem.orders.filter(o => o.customer_rating && o.review_moderation === "approved").map(o => ({ customer_name: o.customer_name, customer_rating: o.customer_rating, customer_review: o.customer_review, product_name: o.product_name })),
     update_order_secure: async p => { staff(p.p_username, p.p_password_hash); const o = mem.orders.find(x => x.id === p.p_order_id); if (!o) throw new Error("الطلب غير موجود"); Object.assign(o, clone(p.p_fields)); await persist(); return null; },
     delete_order_secure: async p => { owner(p.p_username, p.p_password_hash); mem.orders = mem.orders.filter(x => x.id !== p.p_order_id); await persist(); return null; },
     change_owner_password: async p => { const a = owner(p.p_owner_username, p.p_old_password_hash); a.password_hash = p.p_new_password_hash; await persist(); return null; },

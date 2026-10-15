@@ -462,7 +462,7 @@ let adminP = null;
 function loadAdminCode(){
   return adminP || (adminP = new Promise((res, rej) => {
     const el = document.createElement("script");
-    el.src = "admin.js?v=22"; el.onload = res;
+    el.src = "admin.js?v=23"; el.onload = res;
     el.onerror = () => { adminP = null; rej(new Error("admin.js")); };
     document.head.appendChild(el);
   }));
@@ -603,7 +603,10 @@ function renderStore(){
           <div class="grid">
             ${state.reviews.map(r => `
               <div style="background:var(--card);border-radius:16px;padding:16px;">
-                <div style="font-size:16px;color:#f5a623;">${"⭐".repeat(r.customer_rating)}${"☆".repeat(5 - r.customer_rating)}</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                  <div style="font-weight:700;font-size:14px;">${esc(r.customer_name || "عميل")}</div>
+                  <div style="font-size:16px;color:#f5a623;white-space:nowrap;">${"⭐".repeat(r.customer_rating)}${"☆".repeat(5 - r.customer_rating)}</div>
+                </div>
                 ${r.customer_review ? `<p style="font-size:13px;margin:8px 0 0;">${esc(r.customer_review)}</p>` : ""}
                 <div class="hint" style="margin-top:8px;">${esc(r.product_name || "")}</div>
               </div>
@@ -898,9 +901,10 @@ function openTrackOrderModal(){
                 <div class="hint" style="margin-bottom:4px;">تقييمك:</div>
                 <div style="font-size:18px;">${"⭐".repeat(o.customer_rating)}${"☆".repeat(5 - o.customer_rating)}</div>
                 ${o.customer_review ? `<p style="font-size:13px;margin-top:6px;">${esc(o.customer_review)}</p>` : ""}
+                ${o.review_moderation === "pending" ? `<div class="hint" style="margin-top:8px;">⏳ تقييمك بانتظار موافقة الإدارة قبل نشره في المتجر.</div>` : ""}
               </div>
             `;
-          } else {
+          } else if (o.review_moderation !== "rejected") {
             reviewHtml = `
               <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px;">
                 <div class="hint" style="margin-bottom:8px;">قيّم تجربتك معنا:</div>

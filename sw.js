@@ -9,7 +9,7 @@
    المخزّنة بالكاش حتى لو رفعت التعديل الجديد فعليًا على GitHub.
 ========================================================================= */
 
-const CACHE_NAME = "qrcode-static-v14";
+const CACHE_NAME = "qrcode-static-v16";
 
 // الملفات الثابتة فقط (لا تتغير كثيرًا) — يُحدَّث رقم النسخة أعلاه عند أي تعديل بها لإجبار تحديث الكاش
 const STATIC_ASSETS = [
@@ -51,6 +51,9 @@ self.addEventListener("fetch", (event) => {
 
   // لا نتدخل إطلاقًا في طلبات Supabase (بيانات المنتجات/الطلبات/الصور المرفوعة) — تبقى دائمًا Network فقط
   if (url.hostname.includes("supabase.co")) return;
+
+  // store-data.json يُطلب كل مرة بـ ?t=timestamp (انظر loadPublished) — تخزينه يملأ الكاش بنسخ لا تُستخدم أبدًا
+  if (url.pathname.endsWith("/store-data.json")) return;
 
   // نفس الأصل فقط (ملفات الموقع الثابتة) — نطبّق: شبكة أولًا (دائمًا أحدث نسخة)، والكاش كنسخة احتياطية عند انقطاع الإنترنت
   if (url.origin === self.location.origin) {

@@ -1151,29 +1151,6 @@ function openCartCheckoutModal(){
   modalBg.classList.add("open");
 }
 
-/* ======================= زر «تم» بحركة الشاحنة (قابل لإعادة الاستخدام) =======================
-   truckBtnHtml(id) يُرجع HTML الزر، و bindTruckBtn(id, onDone) يشغّل الحركة عند النقر
-   ثم يستدعي onDone بعد انتهائها (5 ثوانٍ، نفس مدة keyframes في style.css) */
-function truckBtnHtml(id){
-  return `<button type="button" class="truck-btn" id="${id}">
-    <span class="default">تم</span>
-    <span class="success">تم <svg viewBox="0 0 12 10"><polyline points="1.5 6 4.5 9 10.5 1"></polyline></svg></span>
-    <div class="truck"><div class="back"></div><div class="front"><div class="window"></div></div><div class="light top"></div><div class="light bottom"></div></div>
-    <div class="lines"></div><div class="tk-box"></div>
-  </button>`;
-}
-function bindTruckBtn(id, onDone){
-  const btn = document.getElementById(id);
-  if (!btn) return;
-  let started = false;
-  btn.onclick = () => {
-    if (started) return;
-    started = true;
-    btn.classList.add("animate");
-    setTimeout(onDone, 5000);
-  };
-}
-
 /* ======================= نافذة الطلب المخصص (بدون منتج محدد من الكتالوج) ======================= */
 function openCustomOrderModal(){
   const vals = { name: "", governorate: "", city: "", phone: "", socialPlatform: "instagram", socialHandle: "", serviceType: "طباعة", desc: "" };
@@ -1291,11 +1268,11 @@ function openCustomOrderModal(){
           <p style="font-weight:800;font-size:15px;margin-bottom:10px;">رقم طلبك: ${orderRef(inserted)}</p>
           <p class="hint" style="margin-bottom:12px;">اضغط "تم" لفتح محادثة واتساب بتفاصيل طلبك — أرسلها وسنتواصل معك لتحديد السعر وتأكيد التنفيذ. احتفظ برقم الطلب لمتابعة حالته لاحقًا.</p>
           <p style="margin:0 0 22px;padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:13px;font-weight:700;line-height:1.8;">🎨 بعد إرسال الرسالة، أرسل التصميم أو الصورة المرجعية في نفس محادثة واتساب.</p>
-          ${truckBtnHtml("closeWaitBtn")}
+          ${truckBtnHtml("closeWaitBtn", "تم", "تم الإرسال")}
         </div>
       `;
       // واتساب يُفتح بعد انتهاء حركة الشاحنة؛ إن حجب المتصفح النافذة ننتقل للرابط مباشرة
-      bindTruckBtn("closeWaitBtn", () => {
+      bindTruckBtn(document.getElementById("closeWaitBtn"), () => {
         const w = window.open(waUrl, "_blank");
         closeModal(); render();
         if (!w) location.href = waUrl;

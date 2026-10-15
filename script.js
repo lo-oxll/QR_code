@@ -462,7 +462,7 @@ let adminP = null;
 function loadAdminCode(){
   return adminP || (adminP = new Promise((res, rej) => {
     const el = document.createElement("script");
-    el.src = "admin.js?v=21"; el.onload = res;
+    el.src = "admin.js?v=22"; el.onload = res;
     el.onerror = () => { adminP = null; rej(new Error("admin.js")); };
     document.head.appendChild(el);
   }));
